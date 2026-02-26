@@ -1,2 +1,3 @@
-# potential-train
 Мегалаба по предмету Интернет вещи в 4 курсе 2 семестра.
+
+Создана группа в контакте для удобного общения команды по проекту: https://vk.me/join/WjP7awbhQplMLZk8FK2XT2SMdlkurMCzteQ=
