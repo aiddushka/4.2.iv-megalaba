@@ -24,6 +24,7 @@ services:
       - postgres
     ports:
       - "8000:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ../backend:/app
 
@@ -36,7 +37,9 @@ services:
       - backend
     ports:
       - "3000:5173"
+    command: npm run dev -- --host 0.0.0.0 --port 5173
     volumes:
+      - /app/node_modules
       - ../frontend-dashboard:/app
 
   frontend-device-config:
@@ -48,7 +51,9 @@ services:
       - backend
     ports:
       - "3001:5174"
+    command: npm run dev -- --host 0.0.0.0 --port 5174
     volumes:
+      - /app/node_modules
       - ../frontend-device-config:/app
 
 volumes:
