@@ -27,5 +27,29 @@ services:
     volumes:
       - ../backend:/app
 
+  frontend-dashboard:
+    build:
+      context: ..
+      dockerfile: docker/frontend-dashboard.Dockerfile
+    container_name: greenhouse_frontend_dashboard
+    depends_on:
+      - backend
+    ports:
+      - "3000:5173"
+    volumes:
+      - ../frontend-dashboard:/app
+
+  frontend-device-config:
+    build:
+      context: ..
+      dockerfile: docker/frontend-device-config.Dockerfile
+    container_name: greenhouse_frontend_device_config
+    depends_on:
+      - backend
+    ports:
+      - "3001:5174"
+    volumes:
+      - ../frontend-device-config:/app
+
 volumes:
   postgres_data:

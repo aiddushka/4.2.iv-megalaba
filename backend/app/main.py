@@ -6,12 +6,10 @@ from app.database.session import engine
 
 
 def create_app() -> FastAPI:
-    # создаем таблицы в БД
     Base.metadata.create_all(bind=engine)
 
     app = FastAPI(title="IoT Greenhouse API")
 
-    # подключаем все роутеры
     app.include_router(auth.router)
     app.include_router(devices.router)
     app.include_router(sensors.router)
@@ -27,3 +25,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
