@@ -13,17 +13,34 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# bcrypt принимает не более 72 байт
+BCRYPT_MAX_BYTES = 72
+
+
+def _truncate_password_for_bcrypt(password: str) -> str:
+    pw_bytes = password.encode("utf-8")
+    if len(pw_bytes) <= BCRYPT_MAX_BYTES:
+        return password
+    return pw_bytes[:BCRYPT_MAX_BYTES].decode("utf-8", errors="ignore")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    plain_password = _truncate_password_for_bcrypt(plain_password)
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
+    password = _truncate_password_for_bcrypt(password)
     return pwd_context.hash(password)
 
 
 def create_user(db: Session, username: str, password: str, is_admin: bool = False) -> User:
-    user = User(username=username, hashed_password=get_password_hash(password), is_admin=is_admin)
+    user = User(
+        username=username,
+        hashed_password=get_password_hash(password),
+        is_admin=is_admin,
+        can_view_dashboard=is_admin,  # админ всегда может; работник — по умолчанию нет
+    )
     db.add(user)
     db.commit()
     db.refresh(user)

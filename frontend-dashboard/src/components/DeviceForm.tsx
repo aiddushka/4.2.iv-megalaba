@@ -71,7 +71,7 @@ export function DeviceForm({ onSubmit }: Props) {
           style={inputStyle}
           value={values.device_uid}
           onChange={handleChange}
-          placeholder="например, controller_1"
+          placeholder="например, temp_sensor_1"
           required
         />
       </div>
@@ -108,7 +108,7 @@ export function DeviceForm({ onSubmit }: Props) {
           style={{ ...inputStyle, minHeight: 60 }}
           value={values.description}
           onChange={handleChange}
-          placeholder="например, Контроллер теплицы №1 у входа"
+          placeholder="например, Датчик температуры в центре теплицы"
         />
       </div>
 
@@ -146,4 +146,3 @@ export function DeviceForm({ onSubmit }: Props) {
     </form>
   );
 }
-

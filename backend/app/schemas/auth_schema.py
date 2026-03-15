@@ -12,9 +12,23 @@ class UserCreate(UserBase):
 class UserOut(UserBase):
     id: int
     is_admin: bool
+    can_view_dashboard: bool = False
 
     class Config:
         orm_mode = True
+
+
+class WorkerOut(UserBase):
+    id: int
+    is_admin: bool
+    can_view_dashboard: bool
+
+    class Config:
+        orm_mode = True
+
+
+class DashboardAccessUpdate(BaseModel):
+    can_view_dashboard: bool
 
 
 class Token(BaseModel):

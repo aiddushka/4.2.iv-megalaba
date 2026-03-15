@@ -19,18 +19,3 @@ class Device(Base):
     )  # registered | unassigned | assigned
 
     owner = relationship("User", backref="devices")
-
-from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP
-from app.database.session import Base
-from datetime import datetime
-
-class Device(Base):
-    __tablename__ = "devices"
-
-    id = Column(Integer, primary_key=True, index=True)
-    device_uid = Column(String(100), unique=True, index=True)
-    type = Column(String(50))
-    name = Column(String(100))
-    status = Column(String(50), default="offline")
-    configured = Column(Boolean, default=False)
-    created_at = Column(TIMESTAMP, default=datetime.utcnow)

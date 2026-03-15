@@ -24,20 +24,7 @@ class DeviceAssign(BaseModel):
     device_uid: str
     location: str
 
-from pydantic import BaseModel
 
-class DeviceCreate(BaseModel):
-    device_uid: str
-    type: str
-    name: str
-
-class DeviceResponse(BaseModel):
-    id: int
-    device_uid: str
-    type: str
-    name: str
-    status: str
-    configured: bool
-
-    class Config:
-        orm_mode = True
+class DeviceUpdate(BaseModel):
+    description: str | None = None
+    location: str | None = None

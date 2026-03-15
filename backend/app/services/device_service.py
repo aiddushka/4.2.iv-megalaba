@@ -37,20 +37,20 @@ def assign_device(db: Session, device_uid: str, location: str) -> Device | None:
     db.refresh(device)
     return device
 
-from sqlalchemy.orm import Session
-from app.models.device import Device
-from app.schemas.device_schema import DeviceCreate
 
-def create_device(db: Session, device: DeviceCreate):
-    db_device = Device(
-        device_uid=device.device_uid,
-        type=device.type,
-        name=device.name
-    )
-    db.add(db_device)
+def update_device(
+    db: Session,
+    device_uid: str,
+    description: str | None = None,
+    location: str | None = None,
+) -> Device | None:
+    device = db.query(Device).filter(Device.device_uid == device_uid).first()
+    if not device:
+        return None
+    if description is not None:
+        device.description = description
+    if location is not None:
+        device.location = location
     db.commit()
-    db.refresh(db_device)
-    return db_device
-
-def get_devices(db: Session):
-    return db.query(Device).all()
+    db.refresh(device)
+    return device

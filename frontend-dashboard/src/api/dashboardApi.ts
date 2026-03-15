@@ -5,12 +5,16 @@ export interface SensorState {
   sensor_type: string | null;
   value: number;
   created_at: string;
+  description?: string | null;
+  location?: string | null;
 }
 
 export interface ActuatorState {
   device_uid: string;
   actuator_type: string;
   state: string;
+  description?: string | null;
+  location?: string | null;
 }
 
 export interface DashboardState {
