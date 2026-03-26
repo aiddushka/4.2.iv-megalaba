@@ -10,12 +10,17 @@ from app.database.session import engine
 def create_app() -> FastAPI:
     # создаем таблицы в БД
     Base.metadata.create_all(bind=engine)
-    # миграция: добавить can_view_dashboard для существующих БД
+    # миграции: добавить новые поля для существующих БД
     try:
         with engine.begin() as conn:
             conn.execute(
                 text(
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_dashboard BOOLEAN DEFAULT false"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE actuators ADD COLUMN IF NOT EXISTS control_mode VARCHAR(20) DEFAULT 'AUTO'"
                 )
             )
     except Exception:

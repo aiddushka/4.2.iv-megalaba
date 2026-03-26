@@ -12,4 +12,6 @@ class Actuator(Base):
         String(50), nullable=False
     )  # irrigation, heater, ventilation, light
     state = Column(String(20), default="OFF")  # ON | OFF | etc.
+    # Режим управления: AUTO (автоматика) или MANUAL (ручное управление с дашборда)
+    control_mode = Column(String(20), default="AUTO")
 

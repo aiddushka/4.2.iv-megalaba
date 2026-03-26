@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardState, DashboardState } from "../api/dashboardApi";
 import { updateDeviceConfig } from "../api/devicesApi";
+import { setActuatorMode } from "../api/actuatorsApi";
 
 interface DashboardPageProps {
   isAdmin: boolean;
@@ -94,7 +95,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           )}
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {state?.sensors.map((s) => (
-              <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
+              <div key={s.device_uid} style={cardStyle}>
                 <div>
                   <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
                   {(s.description || s.location) && (
@@ -103,12 +104,12 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     </div>
                   )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                    {s.sensor_type || "sensor"}: {s.value}
+                    {s.sensor_type || "sensor"}: {s.value ?? "нет данных"}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                    {new Date(s.created_at).toLocaleTimeString()}
+                    {s.created_at ? new Date(s.created_at).toLocaleTimeString() : "нет данных"}
                   </span>
                   {isAdmin && (
                     <button
@@ -164,30 +165,63 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       {a.actuator_type}:{" "}
                       <span
                         style={{
-                          color: a.state === "ON" ? "#bbf7d0" : "#fca5a5",
+                          color: a.state === "ON" ? "#bbf7d0" : a.state ? "#fca5a5" : "#fde68a",
                           fontWeight: 600,
                         }}
                       >
-                        {a.state}
+                        {a.state ?? "нет связи"}
                       </span>
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: "0.8rem", color: "#9ca3af" }}>
+                      Режим:{" "}
+                      {a.control_mode ? (
+                        <strong style={{ color: a.control_mode === "AUTO" ? "#bfdbfe" : "#fde68a" }}>
+                          {a.control_mode === "AUTO" ? "Авто" : "Ручной"}
+                        </strong>
+                      ) : (
+                        <span style={{ color: "#6b7280" }}>нет данных</span>
+                      )}
                     </div>
                   </div>
                   {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(a)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        background: "transparent",
-                        color: "#9ca3af",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Изменить
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActuatorMode(
+                            a.device_uid,
+                            a.control_mode === "AUTO" ? "MANUAL" : "AUTO"
+                          ).then(load)
+                        }
+                        disabled={!a.control_mode}
+                        style={{
+                          padding: "0.25rem 0.6rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 999,
+                          border: "1px solid #374151",
+                          background: "transparent",
+                          color: !a.control_mode ? "#4b5563" : "#9ca3af",
+                          cursor: !a.control_mode ? "default" : "pointer",
+                        }}
+                      >
+                        {!a.control_mode ? "Нет связи" : a.control_mode === "AUTO" ? "В ручной" : "В авто"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(a)}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #374151",
+                          background: "transparent",
+                          color: "#9ca3af",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Изменить описание
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}

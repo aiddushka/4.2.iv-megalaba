@@ -23,6 +23,18 @@ def set_actuator_state(
     return actuator
 
 
+def set_actuator_mode(
+    db: Session, device_uid: str, control_mode: str
+) -> Actuator | None:
+    actuator = db.query(Actuator).filter(Actuator.device_uid == device_uid).first()
+    if not actuator:
+        return None
+    actuator.control_mode = control_mode
+    db.commit()
+    db.refresh(actuator)
+    return actuator
+
+
 def get_actuators(db: Session) -> list[Actuator]:
     return db.query(Actuator).all()
 

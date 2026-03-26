@@ -1,6 +1,7 @@
 import { apiClient } from "./apiClient";
 
 const TOKEN_KEY = "greenhouse_token";
+const TOKEN_CHANGED_EVENT = "greenhouse-token-changed";
 
 export interface User {
   id: number;
@@ -20,10 +21,17 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
 }
 
 export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event(TOKEN_CHANGED_EVENT));
+}
+
+export function onTokenChanged(listener: () => void): () => void {
+  window.addEventListener(TOKEN_CHANGED_EVENT, listener);
+  return () => window.removeEventListener(TOKEN_CHANGED_EVENT, listener);
 }
 
 export async function login(username: string, password: string): Promise<TokenResponse> {

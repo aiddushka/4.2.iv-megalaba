@@ -1,36 +1,49 @@
 import { useEffect, useState } from "react";
-import { Route, Routes, NavLink, useNavigate } from "react-router-dom";
+import { Route, Routes, NavLink, useNavigate, Navigate } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { UnassignedDevicesPage } from "./pages/UnassignedDevicesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { WorkersPage } from "./pages/WorkersPage";
-import { getStoredToken, getMe, clearStoredToken } from "./api/authApi";
+import { getStoredToken, getMe, clearStoredToken, onTokenChanged } from "./api/authApi";
 import type { User } from "./api/authApi";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = getStoredToken();
+    let cancelled = false;
+
+    const syncTokenFromStorage = () => setToken(getStoredToken());
+    const unsubscribe = onTokenChanged(syncTokenFromStorage);
+    window.addEventListener("storage", syncTokenFromStorage);
+
+    setAuthLoading(true);
     if (!token) {
       setUser(null);
       setAuthLoading(false);
-      return;
+    } else {
+      getMe()
+        .then((u) => {
+          if (!cancelled) setUser(u);
+        })
+        .catch(() => {
+          if (!cancelled) setUser(null);
+        })
+        .finally(() => {
+          if (!cancelled) setAuthLoading(false);
+        });
     }
-    getMe()
-      .then((u) => {
-        setUser(u);
-      })
-      .catch(() => {
-        setUser(null);
-      })
-      .finally(() => {
-        setAuthLoading(false);
-      });
-  }, []);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      window.removeEventListener("storage", syncTokenFromStorage);
+    };
+  }, [token]);
 
   const linkStyle: React.CSSProperties = {
     color: "#9ca3af",
@@ -49,7 +62,7 @@ export default function App() {
   const handleLogout = () => {
     clearStoredToken();
     setUser(null);
-    navigate("/login", { replace: true });
+    navigate("/", { replace: true });
   };
 
   if (authLoading) {
@@ -81,9 +94,10 @@ export default function App() {
           <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Greenhouse</h1>
         </header>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<LoginPage />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="*" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     );
@@ -153,7 +167,7 @@ export default function App() {
         <h1 style={{ fontSize: "1.25rem", fontWeight: 600 }}>Greenhouse Dashboard</h1>
         <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <NavLink
-            to="/"
+            to="/dashboard"
             style={({ isActive }) => (isActive ? activeStyle : linkStyle)}
             end
           >
@@ -161,7 +175,7 @@ export default function App() {
           </NavLink>
           {isAdmin && (
             <NavLink
-              to="/unassigned"
+              to="/dashboard/unassigned"
               style={({ isActive }) => (isActive ? activeStyle : linkStyle)}
             >
               Неустановленные устройства
@@ -169,7 +183,7 @@ export default function App() {
           )}
           {isAdmin && (
             <NavLink
-              to="/workers"
+              to="/dashboard/workers"
               style={({ isActive }) => (isActive ? activeStyle : linkStyle)}
             >
               Работники
@@ -198,9 +212,11 @@ export default function App() {
       </header>
       <main style={{ padding: "2rem" }}>
         <Routes>
-          <Route path="/" element={<DashboardPage isAdmin={isAdmin} />} />
-          <Route path="/unassigned" element={<UnassignedDevicesPage />} />
-          <Route path="/workers" element={<WorkersPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage isAdmin={isAdmin} />} />
+          <Route path="/dashboard/unassigned" element={<UnassignedDevicesPage />} />
+          <Route path="/dashboard/workers" element={<WorkersPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
     </div>

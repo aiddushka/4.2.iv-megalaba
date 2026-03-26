@@ -17,8 +17,7 @@ export function RegisterPage() {
       await register(username, password);
       const { access_token } = await login(username, password);
       setStoredToken(access_token);
-      navigate("/", { replace: true });
-      window.location.reload();
+      navigate("/dashboard", { replace: true });
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка регистрации");
     } finally {
@@ -96,7 +95,7 @@ export function RegisterPage() {
         </form>
         <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "#9ca3af" }}>
           Уже есть аккаунт?{" "}
-          <Link to="/login" style={{ color: "#67e8f9" }}>
+          <Link to="/" style={{ color: "#67e8f9" }}>
             Вход
           </Link>
         </p>

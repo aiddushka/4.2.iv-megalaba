@@ -3,8 +3,8 @@ import { apiClient } from "./apiClient";
 export interface SensorState {
   device_uid: string;
   sensor_type: string | null;
-  value: number;
-  created_at: string;
+  value: number | null;
+  created_at: string | null;
   description?: string | null;
   location?: string | null;
 }
@@ -12,9 +12,10 @@ export interface SensorState {
 export interface ActuatorState {
   device_uid: string;
   actuator_type: string;
-  state: string;
+  state: string | null;
   description?: string | null;
   location?: string | null;
+  control_mode: "AUTO" | "MANUAL" | null;
 }
 
 export interface DashboardState {

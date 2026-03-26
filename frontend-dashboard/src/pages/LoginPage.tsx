@@ -16,8 +16,7 @@ export function LoginPage() {
     try {
       const { access_token } = await login(username, password);
       setStoredToken(access_token);
-      navigate("/", { replace: true });
-      window.location.reload();
+      navigate("/dashboard", { replace: true });
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка входа");
     } finally {
