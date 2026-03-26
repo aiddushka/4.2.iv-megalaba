@@ -1,3 +1,103 @@
+Структура проетка:
+4.2.iv-megalaba/
+├─ README.md
+├─ project.md
+├─ docs/
+│  ├─ architecture.md
+│  └─ api-docs.md
+├─ backend/
+│  ├─ main.py                  (вход FastAPI для запуска)
+│  ├─ requirements.txt
+│  └─ app/
+│     ├─ api/
+│     │  ├─ auth.py
+│     │  ├─ devices.py
+│     │  ├─ sensors.py
+│     │  ├─ actuators.py
+│     │  ├─ automation.py
+│     │  └─ dashboard.py
+│     ├─ database/
+│     │  ├─ base.py
+│     │  └─ session.py
+│     ├─ models/
+│     │  ├─ user.py
+│     │  ├─ device.py
+│     │  ├─ sensor_data.py
+│     │  ├─ actuator.py
+│     │  └─ automation_rule.py
+│     ├─ schemas/
+│     │  ├─ auth_schema.py
+│     │  ├─ device_schema.py
+│     │  ├─ sensor_schema.py
+│     │  ├─ actuator_schema.py
+│     │  └─ automation_schema.py
+│     └─ services/
+│        ├─ auth_service.py
+│        ├─ device_service.py
+│        ├─ sensor_service.py
+│        ├─ actuator_service.py
+│        └─ automation_service.py
+├─ device-emulator/
+│  ├─ sensors/
+│  │  ├─ temperature_sensor.py
+│  │  ├─ humidity_air_sensor.py
+│  │  ├─ humidity_soil_sensor.py
+│  │  └─ light_sensor.py
+│  └─ actuators/
+│     ├─ irrigation.py
+│     ├─ heater.py
+│     ├─ ventilation.py
+│     └─ light.py
+├─ frontend-dashboard/
+│  ├─ package.json
+│  ├─ index.html
+│  ├─ tsconfig.json
+│  ├─ vite.config.ts
+│  └─ src/
+│     ├─ main.tsx
+│     ├─ App.tsx
+│     ├─ api/
+│     │  ├─ apiClient.ts
+│     │  ├─ authApi.ts
+│     │  ├─ devicesApi.ts
+│     │  ├─ dashboardApi.ts
+│     │  ├─ actuatorsApi.ts
+│     │  └─ workersApi.ts
+│     ├─ pages/
+│     │  ├─ DashboardPage.tsx
+│     │  ├─ UnassignedDevicesPage.tsx
+│     │  ├─ LoginPage.tsx
+│     │  ├─ RegisterPage.tsx
+│     │  └─ WorkersPage.tsx
+│     └─ components/
+│        └─ DeviceForm.tsx
+└─ frontend-device-config/
+   ├─ package.json
+   ├─ index.html
+   ├─ tsconfig.json
+   ├─ vite.config.ts
+   └─ src/
+      ├─ main.tsx
+      ├─ App.tsx
+      ├─ api/
+      │  ├─ apiClient.ts
+      │  └─ devicesApi.ts
+      ├─ pages/
+      │  └─ RegisterDevicePage.tsx
+      └─ components/
+         └─ DeviceForm.tsx
+
+docker/
+├─ docker-compose.yml           (docker-композиция)
+├─ backend.Dockerfile
+├─ frontend-dashboard.Dockerfile
+└─ frontend-device-config.Dockerfile
+
+tests/
+├─ conftest.py
+├─ test_devices.py
+└─ test_sensors.py
+
 # МегаЛаба: умная теплица (IoT Greenhouse)
 
 ## 1. Общее описание
