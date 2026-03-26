@@ -6,6 +6,7 @@ export interface SensorState {
   value: number | null;
   created_at: string | null;
   description?: string | null;
+  catalog_info?: string | null;
   location?: string | null;
 }
 
@@ -14,6 +15,7 @@ export interface ActuatorState {
   actuator_type: string;
   state: string | null;
   description?: string | null;
+  catalog_info?: string | null;
   location?: string | null;
   control_mode: "AUTO" | "MANUAL" | null;
 }

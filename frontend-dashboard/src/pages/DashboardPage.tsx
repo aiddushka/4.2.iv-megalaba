@@ -14,6 +14,21 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editLocation, setEditLocation] = useState("");
+  const [editCatalogInfo, setEditCatalogInfo] = useState("");
+
+  const [fullInfo, setFullInfo] = useState<{
+    device_uid: string;
+    title: string;
+    text: string;
+    location?: string | null;
+  } | null>(null);
+
+  const truncate = (text: string | null | undefined, maxLen: number) => {
+    const t = (text ?? "").trim();
+    if (!t) return "";
+    if (t.length <= maxLen) return t;
+    return t.slice(0, maxLen).trimEnd() + "...";
+  };
 
   const load = async () => {
     setLoading(true);
@@ -40,13 +55,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     };
   }, []);
 
-  const openEdit = (item: { device_uid: string; description?: string | null; location?: string | null }) => {
+  const openEdit = (item: {
+    device_uid: string;
+    description?: string | null;
+    catalog_info?: string | null;
+    location?: string | null;
+  }) => {
     setEditingUid(item.device_uid);
     setEditDescription(item.description ?? "");
     setEditLocation(item.location ?? "");
+    setEditCatalogInfo(item.catalog_info ?? "");
   };
   const closeEdit = () => {
     setEditingUid(null);
+    setEditCatalogInfo("");
   };
   const saveEdit = async () => {
     if (!editingUid) return;
@@ -54,12 +76,35 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
       await updateDeviceConfig(editingUid, {
         description: editDescription || null,
         location: editLocation || null,
+        catalog_info: editCatalogInfo || null,
       });
       closeEdit();
       await load();
     } catch {
       // keep modal open on error
     }
+  };
+
+  const openFullInfo = (item: {
+    device_uid: string;
+    sensor_type?: string | null;
+    actuator_type?: string | null;
+    catalog_info?: string | null;
+    description?: string | null;
+    location?: string | null;
+  }) => {
+    const text = (item.catalog_info ?? item.description ?? "").toString();
+    const title =
+      item.sensor_type ??
+      item.actuator_type ??
+      "Устройство";
+    if (!text.trim()) return;
+    setFullInfo({
+      device_uid: item.device_uid,
+      title,
+      text,
+      location: item.location ?? null,
+    });
   };
 
   const cardStyle: React.CSSProperties = {
@@ -95,12 +140,42 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           )}
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {state?.sensors.map((s) => (
-              <div key={s.device_uid} style={cardStyle}>
+              <div
+                key={s.device_uid}
+                style={cardStyle}
+                role="button"
+                tabIndex={0}
+                onClick={() =>
+                  openFullInfo({
+                    device_uid: s.device_uid,
+                    sensor_type: s.sensor_type,
+                    catalog_info: s.catalog_info,
+                    description: s.description,
+                    location: s.location,
+                  })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    openFullInfo({
+                      device_uid: s.device_uid,
+                      sensor_type: s.sensor_type,
+                      catalog_info: s.catalog_info,
+                      description: s.description,
+                      location: s.location,
+                    });
+                  }
+                }}
+              >
                 <div>
                   <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
-                  {(s.description || s.location) && (
+                  {(s.catalog_info || s.description) && (
                     <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                      {[s.description, s.location].filter(Boolean).join(" · ")}
+                      {truncate(s.catalog_info ?? s.description, 95)}
+                    </div>
+                  )}
+                  {s.location && (
+                    <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                      {s.location}
                     </div>
                   )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -114,7 +189,10 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => openEdit(s)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(s);
+                      }}
                       style={{
                         padding: "0.25rem 0.5rem",
                         fontSize: "0.75rem",
@@ -153,12 +231,42 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           ) : (
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {state.actuators.map((a) => (
-                <div key={a.device_uid} style={cardStyle}>
+                <div
+                  key={a.device_uid}
+                  style={cardStyle}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    openFullInfo({
+                      device_uid: a.device_uid,
+                      actuator_type: a.actuator_type,
+                      catalog_info: a.catalog_info,
+                      description: a.description,
+                      location: a.location,
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      openFullInfo({
+                        device_uid: a.device_uid,
+                        actuator_type: a.actuator_type,
+                        catalog_info: a.catalog_info,
+                        description: a.description,
+                        location: a.location,
+                      });
+                    }
+                  }}
+                >
                   <div>
                     <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{a.device_uid}</div>
-                    {(a.description || a.location) && (
+                    {(a.catalog_info || a.description) && (
                       <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                        {[a.description, a.location].filter(Boolean).join(" · ")}
+                        {truncate(a.catalog_info ?? a.description, 95)}
+                      </div>
+                    )}
+                    {a.location && (
+                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                        {a.location}
                       </div>
                     )}
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -187,12 +295,13 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setActuatorMode(
                             a.device_uid,
                             a.control_mode === "AUTO" ? "MANUAL" : "AUTO"
-                          ).then(load)
-                        }
+                          ).then(load);
+                        }}
                         disabled={!a.control_mode}
                         style={{
                           padding: "0.25rem 0.6rem",
@@ -208,7 +317,10 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => openEdit(a)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(a);
+                        }}
                         style={{
                           padding: "0.25rem 0.5rem",
                           fontSize: "0.75rem",
@@ -274,6 +386,25 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 }}
               />
             </div>
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                Полное описание (справочник)
+              </label>
+              <textarea
+                value={editCatalogInfo}
+                onChange={(e) => setEditCatalogInfo(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem",
+                  borderRadius: 8,
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxSizing: "border-box",
+                  minHeight: 120,
+                }}
+              />
+            </div>
             <div style={{ marginBottom: "1rem" }}>
               <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
                 Место установки
@@ -321,6 +452,71 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 }}
               >
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fullInfo && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 20,
+          }}
+          onClick={() => setFullInfo(null)}
+        >
+          <div
+            style={{
+              background: "#0f172a",
+              padding: "1.5rem",
+              borderRadius: 16,
+              border: "1px solid #1f2937",
+              minWidth: 340,
+              maxWidth: 720,
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: "0.75rem", fontSize: "1rem" }}>
+              {fullInfo.title} — полное описание
+            </h3>
+            {fullInfo.location && (
+              <div style={{ color: "#9ca3af", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+                Место установки: {fullInfo.location}
+              </div>
+            )}
+            <div
+              style={{
+                whiteSpace: "pre-wrap",
+                color: "#e5e7eb",
+                fontSize: "0.9rem",
+                lineHeight: 1.4,
+              }}
+            >
+              {fullInfo.text}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "1rem" }}>
+              <button
+                type="button"
+                onClick={() => setFullInfo(null)}
+                style={{
+                  padding: "0.5rem 1rem",
+                  borderRadius: 8,
+                  border: "1px solid #374151",
+                  background: "transparent",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                }}
+              >
+                Закрыть
               </button>
             </div>
           </div>

@@ -5,6 +5,7 @@ export interface DeviceFormValues {
   device_type: string;
   description?: string;
   location_hint?: string;
+  catalog_info?: string;
 }
 
 interface Props {
@@ -17,6 +18,7 @@ export function DeviceForm({ onSubmit }: Props) {
     device_type: "TEMP_SENSOR",
     description: "",
     location_hint: "",
+    catalog_info: "",
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -109,6 +111,20 @@ export function DeviceForm({ onSubmit }: Props) {
           value={values.description}
           onChange={handleChange}
           placeholder="например, Контроллер теплицы №1 у входа"
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="catalog_info">
+          Полное описание (справочник)
+        </label>
+        <textarea
+          id="catalog_info"
+          name="catalog_info"
+          style={{ ...inputStyle, minHeight: 120 }}
+          value={values.catalog_info}
+          onChange={handleChange}
+          placeholder="паспорт устройства: диапазоны, назначение, особенности подключения/работы"
         />
       </div>
 

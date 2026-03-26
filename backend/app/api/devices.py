@@ -30,6 +30,7 @@ def register_device(
         device_uid=payload.device_uid,
         device_type=payload.device_type,
         description=payload.description,
+        catalog_info=payload.catalog_info,
         location_hint=payload.location_hint,
     )
 
@@ -91,6 +92,7 @@ def update_device_config(
         device_uid=device_uid,
         description=payload.description,
         location=payload.location,
+        catalog_info=payload.catalog_info,
     )
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")

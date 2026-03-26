@@ -10,6 +10,7 @@ def register_device(
     device_uid: str,
     device_type: str,
     description: str | None = None,
+    catalog_info: str | None = None,
     location_hint: str | None = None,
 ) -> Device:
     existing = db.query(Device).filter(Device.device_uid == device_uid).first()
@@ -22,6 +23,7 @@ def register_device(
         device_uid=device_uid,
         device_type=device_type,
         description=description,
+        catalog_info=catalog_info,
         location=location_hint,
         status="unassigned",
         device_secret=device_secret,
@@ -64,6 +66,7 @@ def update_device(
     device_uid: str,
     description: str | None = None,
     location: str | None = None,
+    catalog_info: str | None = None,
 ) -> Device | None:
     device = db.query(Device).filter(Device.device_uid == device_uid).first()
     if not device:
@@ -72,6 +75,8 @@ def update_device(
         device.description = description
     if location is not None:
         device.location = location
+    if catalog_info is not None:
+        device.catalog_info = catalog_info
     db.commit()
     db.refresh(device)
     return device

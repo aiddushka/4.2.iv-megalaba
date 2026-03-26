@@ -14,6 +14,7 @@ export function RegisterDevicePage() {
         device_uid: values.device_uid,
         device_type: values.device_type,
         description: values.description,
+        catalog_info: values.catalog_info,
         location_hint: values.location_hint,
       });
       setResult(`Устройство зарегистрировано: id=${data.id}, status=${data.status}`);

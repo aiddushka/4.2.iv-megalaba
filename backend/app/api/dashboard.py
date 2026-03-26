@@ -21,7 +21,11 @@ def get_db():
 
 def _device_info(db: Session, device_uid: str) -> dict:
     d = db.query(Device).filter(Device.device_uid == device_uid).first()
-    return {"description": d.description if d else None, "location": d.location if d else None}
+    return {
+        "description": d.description if d else None,
+        "catalog_info": d.catalog_info if d else None,
+        "location": d.location if d else None,
+    }
 
 def _is_sensor(device_type: str) -> bool:
     return device_type.upper().endswith("_SENSOR")
@@ -61,6 +65,7 @@ def get_dashboard_state(
                 "value": None,
                 "created_at": None,
                 "description": d.description,
+                "catalog_info": d.catalog_info,
                 "location": d.location,
             }
         elif _is_actuator(d.device_type):
@@ -70,6 +75,7 @@ def get_dashboard_state(
                 "state": None,
                 "control_mode": None,
                 "description": d.description,
+                "catalog_info": d.catalog_info,
                 "location": d.location,
             }
 
@@ -98,6 +104,7 @@ def get_dashboard_state(
         item["value"] = s.value
         item["created_at"] = s.created_at
         item["description"] = info["description"]
+        item["catalog_info"] = info["catalog_info"]
         item["location"] = info["location"]
 
     actuators_out_by_uid: dict[str, dict] = dict(actuators_by_uid)
@@ -112,6 +119,7 @@ def get_dashboard_state(
         item["state"] = a.state
         item["control_mode"] = a.control_mode
         item["description"] = info["description"]
+        item["catalog_info"] = info["catalog_info"]
         item["location"] = info["location"]
         actuators_out_by_uid[a.device_uid] = item
 

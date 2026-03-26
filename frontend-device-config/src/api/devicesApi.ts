@@ -4,6 +4,7 @@ export interface RegisterDevicePayload {
   device_uid: string;
   device_type: string;
   description?: string;
+  catalog_info?: string;
   location_hint?: string;
 }
 

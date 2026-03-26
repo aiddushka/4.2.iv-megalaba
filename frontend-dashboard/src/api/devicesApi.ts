@@ -44,6 +44,7 @@ export async function registerDevice(payload: RegisterDevicePayload) {
 export interface UpdateDevicePayload {
   description?: string | null;
   location?: string | null;
+  catalog_info?: string | null;
 }
 
 export async function updateDeviceConfig(
