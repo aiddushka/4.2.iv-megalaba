@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardState, DashboardState } from "../api/dashboardApi";
-import { updateDeviceConfig } from "../api/devicesApi";
-import { setActuatorMode } from "../api/actuatorsApi";
+import { deleteDevice, updateDeviceConfig } from "../api/devicesApi";
+import { controlActuator, setActuatorMode } from "../api/actuatorsApi";
 
 interface DashboardPageProps {
   isAdmin: boolean;
@@ -28,6 +28,76 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     if (!t) return "";
     if (t.length <= maxLen) return t;
     return t.slice(0, maxLen).trimEnd() + "...";
+  };
+
+  const getDeviceModelText = (args: {
+    sensor_type?: string | null;
+    actuator_type?: string | null;
+  }) => {
+    const sensorType = (args.sensor_type ?? "").toUpperCase();
+    const actuatorType = (args.actuator_type ?? "").toUpperCase();
+
+    if (sensorType === "TEMP_SENSOR") {
+      return (
+        "Модель работы (эмулятор): температура описывается суточным циклом " +
+        "T(t)=T0 + A*sin(2πt/24h) + шум + медленный дрейф. " +
+        "Так можно имитировать нагрев/охлаждение в теплице."
+      );
+    }
+    if (sensorType === "HUMIDITY_AIR_SENSOR") {
+      return (
+        "Модель работы (эмулятор): влажность воздуха меняется в противофазе к температуре " +
+        "(днём суше, ночью влажнее), добавлены гауссовский шум и небольшая вариативность."
+      );
+    }
+    if (sensorType === "HUMIDITY_SOIL_SENSOR") {
+      return (
+        "Модель работы (эмулятор): влажность почвы убывает из‑за испарения, " +
+        "редко происходят «поливы» (скачки влажности), плюс шум датчика. " +
+        "Это похоже на поведение реального капельного/поливного контура."
+      );
+    }
+    if (sensorType === "LIGHT_SENSOR") {
+      return (
+        "Модель работы (эмулятор): освещённость задаётся как функция времени суток " +
+        "с дневным максимумом и редкими провалами (условные «облака»), " +
+        "плюс шум измерений."
+      );
+    }
+
+    if (actuatorType === "IRRIGATION_ACTUATOR") {
+      return (
+        "Модель работы (эмулятор): при команде ON устройство включает полив на фиксированное время " +
+        "(эмулирует работу насоса/клапана), после чего автоматически переходит в OFF и публикует статус."
+      );
+    }
+    if (actuatorType === "HEATER_ACTUATOR") {
+      return (
+        "Модель работы (эмулятор): при команде ON подогрев работает ограниченное время " +
+        "(эмуляция тепловой инерции), затем OFF. Это подходит для демонстрации автоматики."
+      );
+    }
+    if (actuatorType === "VENTILATION_ACTUATOR") {
+      return (
+        "Модель работы (эмулятор): вентиляция включается по команде ON на ограниченный интервал, " +
+        "после чего выключается (эмуляция управления форточками/вентилятором)."
+      );
+    }
+    if (actuatorType === "LIGHT_ACTUATOR") {
+      return (
+        "Модель работы (эмулятор): освещение переключается по командам ON/OFF и сразу публикует новый статус. " +
+        "В простом демо нет сложного режима яркости."
+      );
+    }
+
+    return "Модель работы (эмулятор): поведение устройства зависит от его типа (датчик/актуатор) и параметров теплицы.";
+  };
+
+  const handleDeleteDevice = async (deviceUid: string) => {
+    const ok = window.confirm(`Удалить устройство ${deviceUid}? Скрипт эмулятора будет остановлен.`);
+    if (!ok) return;
+    await deleteDevice(deviceUid);
+    await load();
   };
 
   const load = async () => {
@@ -93,16 +163,17 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     description?: string | null;
     location?: string | null;
   }) => {
-    const text = (item.catalog_info ?? item.description ?? "").toString();
-    const title =
-      item.sensor_type ??
-      item.actuator_type ??
-      "Устройство";
-    if (!text.trim()) return;
+    const userText = (item.catalog_info ?? item.description ?? "").toString().trim();
+    const title = item.sensor_type ?? item.actuator_type ?? "Устройство";
+    const modelText = getDeviceModelText({
+      sensor_type: item.sensor_type,
+      actuator_type: item.actuator_type,
+    });
+    if (!userText && !modelText) return;
     setFullInfo({
       device_uid: item.device_uid,
       title,
-      text,
+      text: userText ? `${modelText}\n\n${userText}` : modelText,
       location: item.location ?? null,
     });
   };
@@ -204,6 +275,26 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       }}
                     >
                       Изменить
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteDevice(s.device_uid);
+                      }}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: 6,
+                        border: "1px solid #ef4444",
+                        background: "transparent",
+                        color: "#fecaca",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Удалить
                     </button>
                   )}
                 </div>
@@ -315,6 +406,56 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       >
                         {!a.control_mode ? "Нет связи" : a.control_mode === "AUTO" ? "В ручной" : "В авто"}
                       </button>
+
+                      {a.control_mode === "MANUAL" && (
+                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              controlActuator({
+                                device_uid: a.device_uid,
+                                actuator_type: a.actuator_type,
+                                action: "ON",
+                              }).then(load);
+                            }}
+                            style={{
+                              padding: "0.25rem 0.6rem",
+                              fontSize: "0.75rem",
+                              borderRadius: 999,
+                              border: "1px solid #374151",
+                              background: "transparent",
+                              color: "#bbf7d0",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ВКЛ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              controlActuator({
+                                device_uid: a.device_uid,
+                                actuator_type: a.actuator_type,
+                                action: "OFF",
+                              }).then(load);
+                            }}
+                            style={{
+                              padding: "0.25rem 0.6rem",
+                              fontSize: "0.75rem",
+                              borderRadius: 999,
+                              border: "1px solid #374151",
+                              background: "transparent",
+                              color: "#fecaca",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ВЫКЛ
+                          </button>
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -332,6 +473,24 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                         }}
                       >
                         Изменить описание
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDevice(a.device_uid);
+                        }}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #ef4444",
+                          background: "transparent",
+                          color: "#fecaca",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Удалить
                       </button>
                     </div>
                   )}

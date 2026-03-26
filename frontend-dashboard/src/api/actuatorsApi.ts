@@ -10,3 +10,12 @@ export async function setActuatorMode(
   return data;
 }
 
+export async function controlActuator(params: {
+  device_uid: string;
+  action: "ON" | "OFF";
+  actuator_type?: string;
+}) {
+  const { data } = await apiClient.post("/actuators/control", params);
+  return data;
+}
+

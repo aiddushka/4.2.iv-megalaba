@@ -58,3 +58,10 @@ export async function updateDeviceConfig(
   return data;
 }
 
+export async function deleteDevice(deviceUid: string) {
+  const { data } = await apiClient.delete(
+    `/devices/${encodeURIComponent(deviceUid)}`
+  );
+  return data;
+}
+

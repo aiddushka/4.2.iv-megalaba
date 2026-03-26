@@ -4,9 +4,15 @@ from sqlalchemy.orm import Session
 from app.api.auth import get_current_user
 from app.database.session import SessionLocal
 from app.models.user import User
-from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
+from app.schemas.device_schema import (
+    DeviceAssign,
+    DeviceCreate,
+    DeviceOut,
+    DeviceUpdate,
+)
 from app.services import device_service
 from app.services.device_emulator_spawner import spawn_device_emulator
+from app.services.device_emulator_spawner import stop_device_emulator
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -97,3 +103,23 @@ def update_device_config(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     return device
+
+
+@router.delete("/{device_uid}", status_code=200)
+def delete_device(
+    device_uid: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удаление устройства с доски: останавливаем эмулятор и удаляем запись из БД."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    # Сначала останавливаем запущенный эмулятор
+    stop_device_emulator(device_uid)
+
+    ok = device_service.delete_device(db=db, device_uid=device_uid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return {"status": "ok"}

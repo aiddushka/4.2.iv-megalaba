@@ -1,4 +1,6 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
@@ -23,8 +25,20 @@ class Device(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     location = Column(String(255), nullable=True)
+
+    # Паспортные данные устройства (устанавливает администратор)
+    model_name = Column(String(120), nullable=True)
+    manufacturer = Column(String(120), nullable=True)
+    min_value = Column(Float, nullable=True)
+    max_value = Column(Float, nullable=True)
+    config_settings = Column(JSON, nullable=True)  # доп. настройки в JSON
+    is_configured = Column(Boolean, default=False, nullable=False)
+
+    # Мягкое удаление: если deleted_at заполнено, устройство выключено из системы
+    deleted_at = Column(DateTime, nullable=True)
+
     status = Column(
         String(50), default="registered"
-    )  # registered | unassigned | assigned
+    )  # registered | unassigned | assigned | deleted
 
     owner = relationship("User", backref="devices")

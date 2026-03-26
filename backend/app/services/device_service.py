@@ -80,3 +80,12 @@ def update_device(
     db.commit()
     db.refresh(device)
     return device
+
+
+def delete_device(db: Session, device_uid: str) -> bool:
+    device = db.query(Device).filter(Device.device_uid == device_uid).first()
+    if not device:
+        return False
+    db.delete(device)
+    db.commit()
+    return True

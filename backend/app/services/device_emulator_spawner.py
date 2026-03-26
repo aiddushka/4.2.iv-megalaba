@@ -76,3 +76,27 @@ def spawn_device_emulator(device: Device) -> None:
     )
     _running[device.device_uid] = proc
 
+
+def stop_device_emulator(device_uid: str, timeout_seconds: float = 3.0) -> None:
+    """
+    Останавливает запущенный python-эмулятор, если он был запущен backend'ом.
+    """
+    proc = _running.get(device_uid)
+    if not proc:
+        return
+
+    try:
+        proc.terminate()
+        proc.wait(timeout=timeout_seconds)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=1.0)
+        except Exception:
+            pass
+    finally:
+        _running.pop(device_uid, None)
+

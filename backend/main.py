@@ -6,6 +6,7 @@ from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
 from app.mqtt.mqtt_manager import MQTTManager
+from app.models.device_config import DeviceConfig  # noqa: F401
 
 
 def create_app() -> FastAPI:
@@ -38,6 +39,29 @@ def create_app() -> FastAPI:
                 text(
                     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS catalog_info TEXT"
                 )
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS model_name VARCHAR(120)")
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(120)"
+                )
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS min_value FLOAT")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS max_value FLOAT")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS config_settings JSON")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS is_configured BOOLEAN DEFAULT false")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL")
             )
     except Exception:
         pass

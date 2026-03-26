@@ -14,6 +14,13 @@ CREATE TABLE devices (
     device_type VARCHAR(50) NOT NULL,
     description VARCHAR(255),
     catalog_info TEXT,
+    model_name VARCHAR(120),
+    manufacturer VARCHAR(120),
+    min_value FLOAT,
+    max_value FLOAT,
+    config_settings JSON,
+    is_configured BOOLEAN DEFAULT false NOT NULL,
+    deleted_at TIMESTAMP NULL,
     owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     location VARCHAR(255),
     status VARCHAR(50) DEFAULT 'registered',
@@ -51,3 +58,16 @@ CREATE TABLE automation_rules (
     actuator_type VARCHAR(50) NOT NULL,
     action VARCHAR(20) NOT NULL
 );
+
+CREATE TABLE device_configs (
+    id SERIAL PRIMARY KEY,
+    device_uid VARCHAR(100) NOT NULL,
+    config_type VARCHAR(50) NOT NULL,
+    parameters JSON NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_device_configs_device_uid ON device_configs(device_uid);
+CREATE INDEX idx_device_configs_config_type ON device_configs(config_type);
