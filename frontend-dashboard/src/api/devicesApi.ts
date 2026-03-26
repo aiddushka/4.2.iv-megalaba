@@ -45,6 +45,12 @@ export interface UpdateDevicePayload {
   description?: string | null;
   location?: string | null;
   catalog_info?: string | null;
+  model_name?: string | null;
+  manufacturer?: string | null;
+  min_value?: number | null;
+  max_value?: number | null;
+  is_configured?: boolean | null;
+  config_settings?: Record<string, any> | null;
 }
 
 export async function updateDeviceConfig(

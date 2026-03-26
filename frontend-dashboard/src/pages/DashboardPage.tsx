@@ -15,6 +15,12 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [editDescription, setEditDescription] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editCatalogInfo, setEditCatalogInfo] = useState("");
+  const [editModelName, setEditModelName] = useState("");
+  const [editManufacturer, setEditManufacturer] = useState("");
+  const [editMinValue, setEditMinValue] = useState<string>("");
+  const [editMaxValue, setEditMaxValue] = useState<string>("");
+  const [editIsConfigured, setEditIsConfigured] = useState<boolean>(false);
+  const [editConfigSettings, setEditConfigSettings] = useState<string>("");
 
   const [fullInfo, setFullInfo] = useState<{
     device_uid: string;
@@ -33,64 +39,138 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const getDeviceModelText = (args: {
     sensor_type?: string | null;
     actuator_type?: string | null;
+    value?: number | null;
+    state?: string | null;
+    model_name?: string | null;
+    manufacturer?: string | null;
+    min_value?: number | null;
+    max_value?: number | null;
   }) => {
     const sensorType = (args.sensor_type ?? "").toUpperCase();
     const actuatorType = (args.actuator_type ?? "").toUpperCase();
+    const modelName = (args.model_name ?? "").trim();
+    const manufacturer = (args.manufacturer ?? "").trim();
+    const minValue = args.min_value ?? null;
+    const maxValue = args.max_value ?? null;
+
+    const userModelBlock = (fallbackModel: string, fallbackManufacturer: string) => {
+      const m = modelName || fallbackModel;
+      const manuf = manufacturer || fallbackManufacturer;
+      return `Модель: ${m}\nПроизводитель: ${manuf}`;
+    };
 
     if (sensorType === "TEMP_SENSOR") {
       return (
-        "Модель работы (эмулятор): температура описывается суточным циклом " +
-        "T(t)=T0 + A*sin(2πt/24h) + шум + медленный дрейф. " +
-        "Так можно имитировать нагрев/охлаждение в теплице."
+        `Название: Температура воздуха (датчик)\n` +
+        `Тип устройства: ${sensorType}\n` +
+        `Текущее значение: ${args.value ?? "нет данных"} °C\n\n` +
+        `${userModelBlock("DHT22 / DS18B20", "AOSONG / Maxim Integrated")}\n\n` +
+        `Технические характеристики: точность ±0.5°C\n` +
+        `Единицы измерения: °C\n` +
+        `Диапазон работы: -40°C … +80°C\n` +
+        `Оптимальный диапазон для теплицы: 18°C … 25°C\n\n` +
+        `Назначение: контроль микроклимата, управление обогревом и вентиляцией.\n\n` +
+        `Модель работы (эмулятор): температура задаётся суточным циклом ` +
+        `T(t)=T0 + A*sin(2πt/24h) + шум + медленный дрейф.`
       );
     }
     if (sensorType === "HUMIDITY_AIR_SENSOR") {
       return (
-        "Модель работы (эмулятор): влажность воздуха меняется в противофазе к температуре " +
-        "(днём суше, ночью влажнее), добавлены гауссовский шум и небольшая вариативность."
+        `Название: Влажность воздуха (датчик)\n` +
+        `Тип устройства: ${sensorType}\n` +
+        `Текущее значение: ${args.value ?? "нет данных"} %\n\n` +
+        `${userModelBlock("DHT22 / AM2302", "AOSONG")}\n\n` +
+        `Технические характеристики: точность ±2%\n` +
+        `Единицы измерения: %\n` +
+        `Диапазон работы: 0% … 100%\n` +
+        `Оптимальный диапазон для теплицы: 40% … 70%\n\n` +
+        `Назначение: контроль микроклимата, снижение риска грибковых заболеваний.\n\n` +
+        `Модель работы (эмулятор): влажность меняется в противофазе к температуре ` +
+        `(днём суше, ночью влажнее) + гауссовский шум.`
       );
     }
     if (sensorType === "HUMIDITY_SOIL_SENSOR") {
       return (
-        "Модель работы (эмулятор): влажность почвы убывает из‑за испарения, " +
-        "редко происходят «поливы» (скачки влажности), плюс шум датчика. " +
-        "Это похоже на поведение реального капельного/поливного контура."
+        `Название: Влажность почвы (датчик)\n` +
+        `Тип устройства: ${sensorType}\n` +
+        `Текущее значение: ${args.value ?? "нет данных"} %\n\n` +
+        `${userModelBlock("YL-69 / HL-69", "Seeed Studio")}\n\n` +
+        `Технические характеристики: точность ±5%\n` +
+        `Единицы измерения: %\n` +
+        `Диапазон работы: 0% … 100%\n` +
+        `Оптимальный диапазон для теплицы: 50% … 80%\n\n` +
+        `Назначение: автоматический полив, предотвращение пересыхания грунта.\n\n` +
+        `Модель работы (эмулятор): влажность убывает из-за испарения, ` +
+        `редко происходят «поливы» (скачки влажности), плюс шум датчика.`
       );
     }
     if (sensorType === "LIGHT_SENSOR") {
       return (
-        "Модель работы (эмулятор): освещённость задаётся как функция времени суток " +
-        "с дневным максимумом и редкими провалами (условные «облака»), " +
-        "плюс шум измерений."
+        `Название: Освещённость (датчик)\n` +
+        `Тип устройства: ${sensorType}\n` +
+        `Текущее значение: ${args.value ?? "нет данных"} lx\n\n` +
+        `${userModelBlock("BH1750 / GY-30", "Rohm Semiconductor")}\n\n` +
+        `Технические характеристики: точность ±20%\n` +
+        `Единицы измерения: люкс (lx)\n` +
+        `Диапазон работы: 1 … 65535 lx\n` +
+        `Оптимальный диапазон для растений: 10000 … 50000 lx\n\n` +
+        `Назначение: управление дополнительным освещением, контроль светового дня.\n\n` +
+        `Модель работы (эмулятор): освещённость задаётся функцией времени суток ` +
+        `с дневным максимумом и редкими «провалами» (условные «облака») + шум.`
       );
     }
 
     if (actuatorType === "IRRIGATION_ACTUATOR") {
       return (
-        "Модель работы (эмулятор): при команде ON устройство включает полив на фиксированное время " +
-        "(эмулирует работу насоса/клапана), после чего автоматически переходит в OFF и публикует статус."
+        `Название: Система полива (актуатор)\n` +
+        `Тип устройства: ${actuatorType}\n` +
+        `Текущее состояние: ${args.state ?? "нет данных"}\n\n` +
+        `${userModelBlock("Solenoid Valve 3/4\" / Drip Irrigation Kit", "Hunter / Rain Bird")}\n\n` +
+        `Назначение: поддержание оптимальной влажности почвы.\n` +
+        `Технические характеристики: 12V DC / 24V AC, до ~50 л/мин (зависит от комплекта)\n` +
+        `Управление в проекте: ON/OFF (в демо — ограниченное время работы при включении)\n\n` +
+        `Модель работы (эмулятор): при команде ON устройство включает полив на ограниченное время, затем OFF.`
       );
     }
     if (actuatorType === "HEATER_ACTUATOR") {
       return (
-        "Модель работы (эмулятор): при команде ON подогрев работает ограниченное время " +
-        "(эмуляция тепловой инерции), затем OFF. Это подходит для демонстрации автоматики."
+        `Название: Обогреватель/подогрев (актуатор)\n` +
+        `Тип устройства: ${actuatorType}\n` +
+        `Текущее состояние: ${args.state ?? "нет данных"}\n\n` +
+        `${userModelBlock("Infrared Heater / Heat Mat", "Biogreen / HeatMat")}\n\n` +
+        `Назначение: поддержание температуры воздуха и почвы в холодное время.\n` +
+        `Технические характеристики: 220V AC, 500W … 2000W, защита IP44 (пример)\n` +
+        `Управление в проекте: ON/OFF\n\n` +
+        `Модель работы (эмулятор): при команде ON подогрев работает ограниченное время (тепловая инерция), затем OFF.`
       );
     }
     if (actuatorType === "VENTILATION_ACTUATOR") {
       return (
-        "Модель работы (эмулятор): вентиляция включается по команде ON на ограниченный интервал, " +
-        "после чего выключается (эмуляция управления форточками/вентилятором)."
+        `Название: Вентиляция (актуатор)\n` +
+        `Тип устройства: ${actuatorType}\n` +
+        `Текущее состояние: ${args.state ?? "нет данных"}\n\n` +
+        `${userModelBlock("Axial Fan / Exhaust Fan", "VENTS / Soler & Palau")}\n\n` +
+        `Назначение: циркуляция и обновление воздуха.\n` +
+        `Технические характеристики (типовые): производительность до 1000 м³/час, шум < 35 дБ\n` +
+        `Режимы (концептуально): приточная/вытяжная/рециркуляция\n` +
+        `Управление в проекте: ON/OFF\n\n` +
+        `Модель работы (эмулятор): при команде ON вентиляция включается на ограниченный интервал, затем OFF.`
       );
     }
     if (actuatorType === "LIGHT_ACTUATOR") {
       return (
-        "Модель работы (эмулятор): освещение переключается по командам ON/OFF и сразу публикует новый статус. " +
-        "В простом демо нет сложного режима яркости."
+        `Название: Освещение (актуатор)\n` +
+        `Тип устройства: ${actuatorType}\n` +
+        `Текущее состояние: ${args.state ?? "нет данных"}\n\n` +
+        `${userModelBlock("Full Spectrum LED Grow Light", "Spider Farmer / Mars Hydro")}\n\n` +
+        `Назначение: досвечивание растений и управление световым днём.\n` +
+        `Технические характеристики: 400–700 нм (PAR), 100W … 600W, высота подвеса 30–100 см\n` +
+        `Управление в проекте: ON/OFF\n\n` +
+        `Модель работы (эмулятор): освещение переключается по ON/OFF и сразу публикует статус.`
       );
     }
 
-    return "Модель работы (эмулятор): поведение устройства зависит от его типа (датчик/актуатор) и параметров теплицы.";
+    return "Паспорт устройства: поведение зависит от типа (датчик/актуатор).";
   };
 
   const handleDeleteDevice = async (deviceUid: string) => {
@@ -129,24 +209,60 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     device_uid: string;
     description?: string | null;
     catalog_info?: string | null;
+    model_name?: string | null;
+    manufacturer?: string | null;
+    min_value?: number | null;
+    max_value?: number | null;
+    is_configured?: boolean | null;
+    config_settings?: Record<string, any> | null;
     location?: string | null;
   }) => {
     setEditingUid(item.device_uid);
     setEditDescription(item.description ?? "");
     setEditLocation(item.location ?? "");
     setEditCatalogInfo(item.catalog_info ?? "");
+    setEditModelName(item.model_name ?? "");
+    setEditManufacturer(item.manufacturer ?? "");
+    setEditMinValue(item.min_value !== null && item.min_value !== undefined ? String(item.min_value) : "");
+    setEditMaxValue(item.max_value !== null && item.max_value !== undefined ? String(item.max_value) : "");
+    setEditIsConfigured(Boolean(item.is_configured));
+    setEditConfigSettings(
+      item.config_settings ? JSON.stringify(item.config_settings, null, 2) : ""
+    );
   };
   const closeEdit = () => {
     setEditingUid(null);
     setEditCatalogInfo("");
+    setEditDescription("");
+    setEditLocation("");
+    setEditModelName("");
+    setEditManufacturer("");
+    setEditMinValue("");
+    setEditMaxValue("");
+    setEditIsConfigured(false);
+    setEditConfigSettings("");
   };
   const saveEdit = async () => {
     if (!editingUid) return;
     try {
+      let parsedConfigSettings: Record<string, any> | null = null;
+      if (editConfigSettings.trim()) {
+        try {
+          parsedConfigSettings = JSON.parse(editConfigSettings);
+        } catch {
+          parsedConfigSettings = null;
+        }
+      }
       await updateDeviceConfig(editingUid, {
         description: editDescription || null,
         location: editLocation || null,
         catalog_info: editCatalogInfo || null,
+        model_name: editModelName || null,
+        manufacturer: editManufacturer || null,
+        min_value: editMinValue.trim() ? Number(editMinValue) : null,
+        max_value: editMaxValue.trim() ? Number(editMaxValue) : null,
+        is_configured: editIsConfigured,
+        config_settings: parsedConfigSettings,
       });
       closeEdit();
       await load();
@@ -162,18 +278,30 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     catalog_info?: string | null;
     description?: string | null;
     location?: string | null;
+    value?: number | null;
+    state?: string | null;
+    model_name?: string | null;
+    manufacturer?: string | null;
+    min_value?: number | null;
+    max_value?: number | null;
   }) => {
     const userText = (item.catalog_info ?? item.description ?? "").toString().trim();
     const title = item.sensor_type ?? item.actuator_type ?? "Устройство";
     const modelText = getDeviceModelText({
       sensor_type: item.sensor_type,
       actuator_type: item.actuator_type,
+      value: item.value ?? null,
+      state: item.state ?? null,
+      model_name: item.model_name,
+      manufacturer: item.manufacturer,
+      min_value: item.min_value,
+      max_value: item.max_value,
     });
     if (!userText && !modelText) return;
     setFullInfo({
       device_uid: item.device_uid,
       title,
-      text: userText ? `${modelText}\n\n${userText}` : modelText,
+      text: userText ? `${modelText}\n\nПользовательская справка:\n${userText}` : modelText,
       location: item.location ?? null,
     });
   };
@@ -223,6 +351,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     catalog_info: s.catalog_info,
                     description: s.description,
                     location: s.location,
+                    value: s.value ?? null,
+                    model_name: s.model_name ?? null,
+                    manufacturer: s.manufacturer ?? null,
+                    min_value: s.min_value ?? null,
+                    max_value: s.max_value ?? null,
                   })
                 }
                 onKeyDown={(e) => {
@@ -233,6 +366,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       catalog_info: s.catalog_info,
                       description: s.description,
                       location: s.location,
+                      value: s.value ?? null,
+                      model_name: s.model_name ?? null,
+                      manufacturer: s.manufacturer ?? null,
+                      min_value: s.min_value ?? null,
+                      max_value: s.max_value ?? null,
                     });
                   }
                 }}
@@ -247,6 +385,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   {s.location && (
                     <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
                       {s.location}
+                    </div>
+                  )}
+                  {s.is_configured === false && (
+                    <div style={{ marginTop: 6, fontSize: "0.75rem", color: "#fecaca" }}>
+                      Не настроено
                     </div>
                   )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -334,6 +477,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       catalog_info: a.catalog_info,
                       description: a.description,
                       location: a.location,
+                      state: a.state ?? null,
+                      model_name: a.model_name ?? null,
+                      manufacturer: a.manufacturer ?? null,
+                      min_value: a.min_value ?? null,
+                      max_value: a.max_value ?? null,
                     })
                   }
                   onKeyDown={(e) => {
@@ -344,6 +492,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                         catalog_info: a.catalog_info,
                         description: a.description,
                         location: a.location,
+                        state: a.state ?? null,
+                        model_name: a.model_name ?? null,
+                        manufacturer: a.manufacturer ?? null,
+                        min_value: a.min_value ?? null,
+                        max_value: a.max_value ?? null,
                       });
                     }
                   }}
@@ -358,6 +511,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     {a.location && (
                       <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
                         {a.location}
+                      </div>
+                    )}
+                    {a.is_configured === false && (
+                      <div style={{ marginTop: 6, fontSize: "0.75rem", color: "#fecaca" }}>
+                        Не настроено
                       </div>
                     )}
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -562,6 +720,119 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   boxSizing: "border-box",
                   minHeight: 120,
                 }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                Модель устройства
+              </label>
+              <input
+                value={editModelName}
+                onChange={(e) => setEditModelName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem",
+                  borderRadius: 8,
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                Производитель
+              </label>
+              <input
+                value={editManufacturer}
+                onChange={(e) => setEditManufacturer(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem",
+                  borderRadius: 8,
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                  min_value
+                </label>
+                <input
+                  value={editMinValue}
+                  onChange={(e) => setEditMinValue(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    borderRadius: 8,
+                    border: "1px solid #1f2937",
+                    background: "#020617",
+                    color: "#e5e7eb",
+                    boxSizing: "border-box",
+                  }}
+                  placeholder="например, 15"
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                  max_value
+                </label>
+                <input
+                  value={editMaxValue}
+                  onChange={(e) => setEditMaxValue(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    borderRadius: 8,
+                    border: "1px solid #1f2937",
+                    background: "#020617",
+                    color: "#e5e7eb",
+                    boxSizing: "border-box",
+                  }}
+                  placeholder="например, 30"
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={editIsConfigured}
+                  onChange={(e) => setEditIsConfigured(e.target.checked)}
+                />
+                <span style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
+                  Устройство настроено
+                </span>
+              </label>
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
+                config_settings (JSON)
+              </label>
+              <textarea
+                value={editConfigSettings}
+                onChange={(e) => setEditConfigSettings(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "0.5rem",
+                  borderRadius: 8,
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  boxSizing: "border-box",
+                  minHeight: 100,
+                }}
+                placeholder='например: {"calibration_offset": 0.2, "frequency_seconds": 5}'
               />
             </div>
             <div style={{ marginBottom: "1rem" }}>

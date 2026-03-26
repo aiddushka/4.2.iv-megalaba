@@ -25,6 +25,12 @@ def _device_info(db: Session, device_uid: str) -> dict:
         "description": d.description if d else None,
         "catalog_info": d.catalog_info if d else None,
         "location": d.location if d else None,
+        "model_name": d.model_name if d else None,
+        "manufacturer": d.manufacturer if d else None,
+        "min_value": d.min_value if d else None,
+        "max_value": d.max_value if d else None,
+        "config_settings": d.config_settings if d else None,
+        "is_configured": d.is_configured if d else None,
     }
 
 def _is_sensor(device_type: str) -> bool:
@@ -67,6 +73,12 @@ def get_dashboard_state(
                 "description": d.description,
                 "catalog_info": d.catalog_info,
                 "location": d.location,
+                "model_name": d.model_name,
+                "manufacturer": d.manufacturer,
+                "min_value": d.min_value,
+                "max_value": d.max_value,
+                "config_settings": d.config_settings,
+                "is_configured": d.is_configured,
             }
         elif _is_actuator(d.device_type):
             actuators_by_uid[d.device_uid] = {
@@ -77,6 +89,12 @@ def get_dashboard_state(
                 "description": d.description,
                 "catalog_info": d.catalog_info,
                 "location": d.location,
+                "model_name": d.model_name,
+                "manufacturer": d.manufacturer,
+                "min_value": d.min_value,
+                "max_value": d.max_value,
+                "config_settings": d.config_settings,
+                "is_configured": d.is_configured,
             }
 
     latest_sensors = (
@@ -106,6 +124,12 @@ def get_dashboard_state(
         item["description"] = info["description"]
         item["catalog_info"] = info["catalog_info"]
         item["location"] = info["location"]
+        item["model_name"] = info["model_name"]
+        item["manufacturer"] = info["manufacturer"]
+        item["min_value"] = info["min_value"]
+        item["max_value"] = info["max_value"]
+        item["config_settings"] = info["config_settings"]
+        item["is_configured"] = info["is_configured"]
 
     actuators_out_by_uid: dict[str, dict] = dict(actuators_by_uid)
     for a in actuators:
@@ -121,6 +145,12 @@ def get_dashboard_state(
         item["description"] = info["description"]
         item["catalog_info"] = info["catalog_info"]
         item["location"] = info["location"]
+        item["model_name"] = info["model_name"]
+        item["manufacturer"] = info["manufacturer"]
+        item["min_value"] = info["min_value"]
+        item["max_value"] = info["max_value"]
+        item["config_settings"] = info["config_settings"]
+        item["is_configured"] = info["is_configured"]
         actuators_out_by_uid[a.device_uid] = item
 
     return {

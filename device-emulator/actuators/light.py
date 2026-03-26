@@ -9,9 +9,10 @@ import paho.mqtt.client as mqtt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mqtt_common import command_base_str, mqtt_topic, sign_hmac_hex, status_base_str, to_json  # noqa: E402
+from http_client import http_get_json
 
 
-ACTUATOR_TYPE = "light"
+ACTUATOR_TYPE = "LIGHT_ACTUATOR"
 
 
 def main() -> None:
@@ -36,9 +37,15 @@ def main() -> None:
     client = mqtt.Client()
     state_lock = Lock()
     state = "OFF"
+    auto_off_at: float | None = None
 
     used_nonces: set[str] = set()
     allowed_drift = int(os.getenv("MQTT_ALLOWED_DRIFT_SECONDS", "300"))
+
+    default_on_duration_seconds: float = 20.0
+    on_duration_seconds: float = default_on_duration_seconds
+    config_poll_seconds = float(os.getenv("CONFIG_POLL_SECONDS", "10"))
+    last_poll = 0.0
 
     def publish_status() -> None:
         nonlocal state
@@ -101,6 +108,10 @@ def main() -> None:
 
         with state_lock:
             state = action
+            if action == "ON":
+                auto_off_at = time.time() + on_duration_seconds
+            else:
+                auto_off_at = None
         publish_status()
 
     client.on_message = on_message
@@ -112,8 +123,27 @@ def main() -> None:
     last_status_ts = 0.0
 
     while True:
+        now = time.time()
+        if now - last_poll >= config_poll_seconds:
+            last_poll = now
+            try:
+                cfg_url = f"{os.getenv('HTTP_BASE_URL', 'http://localhost:8000')}/devices/{device_uid}/config"
+                cfg = http_get_json(cfg_url, timeout_seconds=5.0)
+                cc = cfg.get("config_settings", {}) or {}
+                if cc.get("on_duration_seconds") is not None:
+                    on_duration_seconds = float(cc["on_duration_seconds"])
+            except Exception:
+                pass
+
         time.sleep(0.5)
         now = time.time()
+        if auto_off_at is not None and now >= auto_off_at:
+            with state_lock:
+                if state == "ON":
+                    state = "OFF"
+            auto_off_at = None
+            publish_status()
+
         if now - last_status_ts >= status_period:
             last_status_ts = now
             publish_status()

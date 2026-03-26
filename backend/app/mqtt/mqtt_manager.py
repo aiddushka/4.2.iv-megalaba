@@ -117,7 +117,13 @@ class MQTTManager:
         return True
 
     def _load_device(self, db: Session, device_uid: str) -> Device | None:
-        return db.query(Device).filter(Device.device_uid == device_uid).first()
+        d = db.query(Device).filter(Device.device_uid == device_uid).first()
+        if not d:
+            return None
+        # Удалённые устройства не должны участвовать в системе.
+        if getattr(d, "status", None) == "deleted":
+            return None
+        return d
 
     def _json_load(self, payload: bytes) -> dict[str, Any] | None:
         try:
