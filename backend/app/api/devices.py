@@ -6,6 +6,7 @@ from app.database.session import SessionLocal
 from app.models.user import User
 from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
 from app.services import device_service
+from app.services.device_emulator_spawner import spawn_device_emulator
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -31,6 +32,11 @@ def register_device(
         description=payload.description,
         location_hint=payload.location_hint,
     )
+
+    # Запускаем эмулятор/скрипт устройства, чтобы оно сразу начало отправлять данные в сеть
+    # (в рамках мегалабы устройство эмулируется Python-скриптом).
+    spawn_device_emulator(device)
+
     return device
 
 
@@ -49,7 +55,9 @@ def get_assigned_devices(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return device_service.get_assigned_devices(db)
+    return device_service.get_assigned_devices(
+        db=db, is_admin=current_user.is_admin, owner_id=current_user.id
+    )
 
 
 @router.post("/assign", response_model=DeviceOut)

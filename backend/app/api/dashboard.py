@@ -43,8 +43,13 @@ def get_dashboard_state(
             detail="Доступ к дашборду запрещён. Обратитесь к администратору.",
         )
 
-    # Показываем на дашборде все "установленные" устройства, даже если они ещё не шлют данные
-    assigned_devices = db.query(Device).filter(Device.status == "assigned").all()
+    # Показываем на дашборде "установленные" устройства.
+    # Для изоляции данных: работник видит только свои (owner_id == current_user.id)
+    # и общие (owner_id IS NULL) устройства.
+    q = db.query(Device).filter(Device.status == "assigned")
+    if not current_user.is_admin:
+        q = q.filter((Device.owner_id.is_(None)) | (Device.owner_id == current_user.id))
+    assigned_devices = q.all()
     sensors_by_uid: dict[str, dict] = {}
     actuators_by_uid: dict[str, dict] = {}
 
@@ -80,36 +85,29 @@ def get_dashboard_state(
     for s in latest_sensors:
         if s.device_uid in seen_sensor_uids:
             continue
+        # На дашборде показываем только те сенсоры, которые входят в список видимых assigned устройств
+        if s.device_uid not in sensors_by_uid:
+            continue
         seen_sensor_uids.add(s.device_uid)
         info = _device_info(db, s.device_uid)
         existing = sensors_by_uid.get(s.device_uid)
-        item = existing or {
-            "device_uid": s.device_uid,
-            "sensor_type": s.sensor_type,
-            "value": None,
-            "created_at": None,
-            "description": info["description"],
-            "location": info["location"],
-        }
+        item = existing
+        if item is None:
+            continue
         item["sensor_type"] = s.sensor_type or item.get("sensor_type")
         item["value"] = s.value
         item["created_at"] = s.created_at
         item["description"] = info["description"]
         item["location"] = info["location"]
-        if not existing:
-            sensors_out.append(item)
 
     actuators_out_by_uid: dict[str, dict] = dict(actuators_by_uid)
     for a in actuators:
+        if a.device_uid not in actuators_by_uid:
+            continue
         info = _device_info(db, a.device_uid)
-        item = actuators_out_by_uid.get(a.device_uid) or {
-            "device_uid": a.device_uid,
-            "actuator_type": a.actuator_type,
-            "state": None,
-            "control_mode": None,
-            "description": info["description"],
-            "location": info["location"],
-        }
+        item = actuators_out_by_uid.get(a.device_uid)
+        if item is None:
+            continue
         item["actuator_type"] = a.actuator_type or item.get("actuator_type")
         item["state"] = a.state
         item["control_mode"] = a.control_mode

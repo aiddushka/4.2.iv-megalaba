@@ -5,6 +5,7 @@ from sqlalchemy import text
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
+from app.mqtt.mqtt_manager import MQTTManager
 
 
 def create_app() -> FastAPI:
@@ -21,6 +22,21 @@ def create_app() -> FastAPI:
             conn.execute(
                 text(
                     "ALTER TABLE actuators ADD COLUMN IF NOT EXISTS control_mode VARCHAR(20) DEFAULT 'AUTO'"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_secret VARCHAR(255) NOT NULL DEFAULT 'dev_secret'"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS sensor_type VARCHAR(50)"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS catalog_info TEXT"
                 )
             )
     except Exception:
@@ -43,6 +59,10 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="IoT Greenhouse API")
 
+    # MQTT менеджер запускается в фоне и обеспечивает приём телеметрии от устройств.
+    mqtt_manager = MQTTManager()
+    app.state.mqtt_manager = mqtt_manager
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://localhost:3001"],
@@ -58,6 +78,14 @@ def create_app() -> FastAPI:
     app.include_router(actuators.router)
     app.include_router(automation.router)
     app.include_router(dashboard.router)
+
+    @app.on_event("startup")
+    def _startup() -> None:
+        mqtt_manager.start()
+
+    @app.on_event("shutdown")
+    def _shutdown() -> None:
+        mqtt_manager.stop()
 
     @app.get("/")
     def root():

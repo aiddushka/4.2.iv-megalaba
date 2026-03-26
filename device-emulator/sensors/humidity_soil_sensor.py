@@ -1,18 +1,73 @@
-import time
+import argparse
+import os
 import random
-import requests
+import sys
+import time
+import uuid
 
-API_URL = "http://localhost:8000/sensor-data/"
-DEVICE_UID = "humidity_soil_sensor_1"
+import paho.mqtt.client as mqtt
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from mqtt_common import mqtt_topic, sign_hmac_hex, status_base_str, telemetry_base_str, to_json  # noqa: E402,F401
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="MQTT soil humidity sensor emulator")
+    parser.add_argument("--device_uid", required=True)
+    parser.add_argument("--device_secret", required=True)
+    parser.add_argument("--mqtt_host", required=True)
+    parser.add_argument("--mqtt_port", type=int, default=1883)
+    parser.add_argument("--period_seconds", type=float, default=5)
+    args = parser.parse_args()
+
+    device_uid = args.device_uid
+    device_secret = args.device_secret
+    mqtt_host = args.mqtt_host
+    mqtt_port = args.mqtt_port
+    period_seconds = float(args.period_seconds)
+
+    sensor_type = "humidity_soil"
+    base_topic = os.getenv("MQTT_BASE_TOPIC", "greenhouse/devices")
+    telemetry_topic = mqtt_topic(base_topic, device_uid, "telemetry")
+
+    # Внутреннее состояние: влажность почвы меняется медленно.
+    soil_moisture = random.uniform(35.0, 55.0)
+
+    client = mqtt.Client()
+    client.connect(mqtt_host, mqtt_port, keepalive=30)
+    client.loop_start()
+
+    while True:
+        # Испарение/высыхание (медленно уменьшаем влажность)
+        evap = random.uniform(0.03, 0.10)
+        soil_moisture -= evap
+
+        # Редкие "поливы" для правдоподобия, если реальных команд нет.
+        if random.random() < 0.03:
+            soil_moisture += random.uniform(8.0, 18.0)
+
+        # Небольшой шум датчика
+        soil_moisture += random.gauss(0, 0.25)
+        soil_moisture = max(0.0, min(100.0, soil_moisture))
+        value = round(soil_moisture, 2)
+
+        ts = int(time.time())
+        nonce = str(uuid.uuid4())
+        base_str = telemetry_base_str(device_uid, sensor_type, value, ts, nonce)
+        signature = sign_hmac_hex(device_secret, base_str)
+
+        payload = {
+            "device_uid": device_uid,
+            "sensor_type": sensor_type,
+            "value": value,
+            "ts": ts,
+            "nonce": nonce,
+            "signature": signature,
+        }
+        client.publish(telemetry_topic, to_json(payload), qos=0, retain=False)
+        time.sleep(period_seconds)
+
 
 if __name__ == "__main__":
-    while True:
-        soil_moisture = round(20 + random.random() * 60, 2)  # 20–80 %
-        payload = {"device_uid": DEVICE_UID, "value": soil_moisture}
-        try:
-            r = requests.post(API_URL, json=payload, timeout=5)
-            print(f"Sent soil moisture: {soil_moisture}% Status: {r.status_code}")
-        except Exception as e:
-            print("Error sending soil moisture:", e)
-        time.sleep(5)
+    main()
 

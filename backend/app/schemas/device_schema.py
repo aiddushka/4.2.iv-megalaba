@@ -5,6 +5,7 @@ class DeviceBase(BaseModel):
     device_uid: str
     device_type: str
     description: str | None = None
+    catalog_info: str | None = None
 
 
 class DeviceCreate(DeviceBase):
@@ -28,3 +29,4 @@ class DeviceAssign(BaseModel):
 class DeviceUpdate(BaseModel):
     description: str | None = None
     location: str | None = None
+    catalog_info: str | None = None

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database.session import SessionLocal
@@ -21,13 +21,24 @@ def get_db():
 
 
 @router.post("/control", response_model=ActuatorStateOut)
-def control_actuator(cmd: ActuatorCommand, db: Session = Depends(get_db)):
+def control_actuator(cmd: ActuatorCommand, request: Request, db: Session = Depends(get_db)):
     actuator = actuator_service.set_actuator_state(
         db=db,
         device_uid=cmd.device_uid,
         action=cmd.action,
         actuator_type=cmd.actuator_type,
     )
+
+    # Отправляем команду устройству через MQTT, чтобы эмулятор/реальное устройство
+    # подтвердило состояние (и могло быть показано на дашборде).
+    mqtt_manager = getattr(request.app.state, "mqtt_manager", None)
+    if mqtt_manager is not None:
+        mqtt_manager.publish_actuator_command(
+            device_uid=actuator.device_uid,
+            actuator_type=actuator.actuator_type,
+            action=actuator.state,
+        )
+
     return ActuatorStateOut(
         device_uid=actuator.device_uid,
         actuator_type=actuator.actuator_type,

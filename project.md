@@ -93,10 +93,6 @@ docker/
 ├─ frontend-dashboard.Dockerfile
 └─ frontend-device-config.Dockerfile
 
-tests/
-├─ conftest.py
-├─ test_devices.py
-└─ test_sensors.py
 
 # МегаЛаба: умная теплица (IoT Greenhouse)
 
