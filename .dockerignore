@@ -1,0 +1,44 @@
+# Git и система контроля версий
+.git
+.gitignore
+.dockerignore
+
+# Переменные окружения и конфиденциальные данные
+.env
+.env.*
+!.env.example
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Зависимости и сборочные артефакты (исключаем во всех папках)
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/dist
+**/build
+**/.vite
+**/.next
+
+# IDE и редакторы
+.vscode
+.idea
+*.iml
+
+# Документация и мета-файлы
+README.md
+LICENSE
+*.md
+
+# Докер-файлы и compose (не нужны в образе)
+docker-compose*.yml
+docker/*.Dockerfile
+
+# Если есть другие папки, не нужные в контейнерах
+# (но оставляем backend, frontend-*, database, docker — они нужны для сборки)
