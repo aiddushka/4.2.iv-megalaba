@@ -3,8 +3,13 @@ import { FormEvent, useState } from "react";
 export interface DeviceFormValues {
   device_uid: string;
   device_type: string;
-  description?: string;
-  location_hint?: string;
+  description: string;
+  location_hint: string;
+  controller: string;
+  pin: number | "";
+  bus: string;
+  bus_address: string;
+  components: string[];
 }
 
 interface Props {
@@ -17,6 +22,11 @@ export function DeviceForm({ onSubmit }: Props) {
     device_type: "TEMP_SENSOR",
     description: "",
     location_hint: "",
+    controller: "Arduino Uno",
+    pin: "",
+    bus: "Digital",
+    bus_address: "",
+    components: [],
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,12 +34,26 @@ export function DeviceForm({ onSubmit }: Props) {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
+    if (name === "pin") {
+      setValues((prev) => ({ ...prev, pin: value === "" ? "" : Number(value) }));
+      return;
+    }
+    if (name === "bus") {
+      setValues((prev) => ({ ...prev, bus: value, bus_address: value === "I2C" ? prev.bus_address : "" }));
+      return;
+    }
     setValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleComponentsChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = Array.from(e.target.selectedOptions).map((option) => option.value);
+    setValues((prev) => ({ ...prev, components: selected }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!values.device_uid.trim()) return;
+    if (values.pin === "") return;
     setSubmitting(true);
     try {
       await onSubmit(values);
@@ -58,6 +82,8 @@ export function DeviceForm({ onSubmit }: Props) {
     fontSize: "0.85rem",
     color: "#9ca3af",
   };
+  const imageName = values.device_type.toLowerCase();
+  const previewUrl = `http://localhost:8000/static/images/${imageName}.png`;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -96,6 +122,21 @@ export function DeviceForm({ onSubmit }: Props) {
           <option value="VENTILATION_ACTUATOR">Актуатор вентиляции</option>
           <option value="LIGHT_ACTUATOR">Актуатор освещения</option>
         </select>
+        <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <img
+            src={previewUrl}
+            alt={values.device_type}
+            width={50}
+            height={50}
+            style={{ borderRadius: 6, border: "1px solid #1f2937", objectFit: "cover", background: "#0f172a" }}
+            onError={(e) => {
+              const target = e.currentTarget;
+              target.onerror = null;
+              target.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50'><rect width='100%' height='100%' fill='%230f172a'/><text x='50%' y='54%' text-anchor='middle' fill='%239ca3af' font-size='10' font-family='Arial'>No image</text></svg>";
+            }}
+          />
+          <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>Превью устройства</span>
+        </div>
       </div>
 
       <div style={fieldStyle}>
@@ -105,10 +146,12 @@ export function DeviceForm({ onSubmit }: Props) {
         <textarea
           id="description"
           name="description"
-          style={{ ...inputStyle, minHeight: 60 }}
+          style={{ ...inputStyle, minHeight: 120 }}
           value={values.description}
           onChange={handleChange}
-          placeholder="например, Контроллер теплицы №1 у входа"
+          placeholder="Датчик DHT22 подключен к пину 2 Arduino Uno. Питание 5V. Данные снимаются каждые 5 секунд."
+          rows={6}
+          required
         />
       </div>
 
@@ -123,7 +166,95 @@ export function DeviceForm({ onSubmit }: Props) {
           value={values.location_hint}
           onChange={handleChange}
           placeholder="например, Теплица А, левая грядка"
+          required
         />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="controller">
+          Контроллер
+        </label>
+        <select
+          id="controller"
+          name="controller"
+          style={inputStyle}
+          value={values.controller}
+          onChange={handleChange}
+          required
+        >
+          <option value="Arduino Uno">Arduino Uno</option>
+          <option value="Arduino Nano">Arduino Nano</option>
+          <option value="ESP32">ESP32</option>
+          <option value="Raspberry Pi">Raspberry Pi</option>
+        </select>
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="pin">
+          Pin GPIO
+        </label>
+        <input
+          id="pin"
+          name="pin"
+          type="number"
+          min={0}
+          style={inputStyle}
+          value={values.pin}
+          onChange={handleChange}
+          placeholder="например, 2"
+          required
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="bus">
+          Шина подключения
+        </label>
+        <select id="bus" name="bus" style={inputStyle} value={values.bus} onChange={handleChange} required>
+          <option value="Digital">Digital</option>
+          <option value="Analog">Analog</option>
+          <option value="I2C">I2C</option>
+          <option value="SPI">SPI</option>
+          <option value="OneWire">OneWire</option>
+        </select>
+      </div>
+
+      {values.bus === "I2C" && (
+        <div style={fieldStyle}>
+          <label style={labelStyle} htmlFor="bus_address">
+            I2C адрес
+          </label>
+          <input
+            id="bus_address"
+            name="bus_address"
+            style={inputStyle}
+            value={values.bus_address}
+            onChange={handleChange}
+            placeholder="например, 0x76"
+          />
+        </div>
+      )}
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="components">
+          Компоненты
+        </label>
+        <select
+          id="components"
+          name="components"
+          style={{ ...inputStyle, minHeight: 120 }}
+          multiple
+          value={values.components}
+          onChange={handleComponentsChange}
+        >
+          <option value="DHT22">DHT22</option>
+          <option value="DS18B20">DS18B20</option>
+          <option value="BH1750">BH1750</option>
+          <option value="Резистор 10кОм">Резистор 10кОм</option>
+          <option value="Реле">Реле</option>
+          <option value="Транзистор">Транзистор</option>
+          <option value="Конденсатор">Конденсатор</option>
+        </select>
       </div>
 
       <button

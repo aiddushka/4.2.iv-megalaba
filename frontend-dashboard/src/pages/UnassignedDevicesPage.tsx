@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { assignDevice, fetchUnassignedDevices, Device } from "../api/devicesApi";
+import { assignDevice, fetchUnassignedDevices, Device, updateDeviceConfig } from "../api/devicesApi";
 
 export function UnassignedDevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -33,6 +33,7 @@ export function UnassignedDevicesPage() {
     setAssigningId(device.id);
     try {
       await assignDevice({ device_uid: device.device_uid, location });
+      await updateDeviceConfig(device.device_uid, { status: "active" });
       await load();
     } finally {
       setAssigningId(null);

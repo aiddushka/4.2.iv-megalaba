@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from pathlib import Path
 
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
@@ -7,8 +10,41 @@ from app.database.session import engine
 
 def create_app() -> FastAPI:
     Base.metadata.create_all(bind=engine)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS controller VARCHAR(100)")
+            )
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS pin INTEGER"))
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS bus VARCHAR(50)"))
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS bus_address VARCHAR(100)")
+            )
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS components JSON"))
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_maintenance TIMESTAMP"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS maintenance_notes VARCHAR(512)"
+                )
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS change_history JSON")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ALTER COLUMN status SET DEFAULT 'active'")
+            )
+    except Exception:
+        pass
 
     app = FastAPI(title="IoT Greenhouse API")
+    project_root = Path(__file__).resolve().parent.parent.parent
+    images_dir = project_root / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
 
     app.include_router(auth.router)
     app.include_router(devices.router)

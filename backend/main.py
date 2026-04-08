@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from pathlib import Path
 
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
@@ -17,6 +19,36 @@ def create_app() -> FastAPI:
                 text(
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_dashboard BOOLEAN DEFAULT false"
                 )
+            )
+    except Exception:
+        pass
+    # миграция: добавить новые поля devices для расширенной конфигурации
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS controller VARCHAR(100)")
+            )
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS pin INTEGER"))
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS bus VARCHAR(50)"))
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS bus_address VARCHAR(100)")
+            )
+            conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS components JSON"))
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_maintenance TIMESTAMP"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS maintenance_notes VARCHAR(512)"
+                )
+            )
+            conn.execute(
+                text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS change_history JSON")
+            )
+            conn.execute(
+                text("ALTER TABLE devices ALTER COLUMN status SET DEFAULT 'active'")
             )
     except Exception:
         pass
@@ -37,6 +69,10 @@ def create_app() -> FastAPI:
         pass
 
     app = FastAPI(title="IoT Greenhouse API")
+    project_root = Path(__file__).resolve().parent.parent
+    images_dir = project_root / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
 
     app.add_middleware(
         CORSMiddleware,

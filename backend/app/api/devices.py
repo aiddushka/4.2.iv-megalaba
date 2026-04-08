@@ -30,6 +30,11 @@ def register_device(
         device_type=payload.device_type,
         description=payload.description,
         location_hint=payload.location_hint,
+        controller=payload.controller,
+        pin=payload.pin,
+        bus=payload.bus,
+        bus_address=payload.bus_address,
+        components=payload.components,
     )
     return device
 
@@ -50,6 +55,18 @@ def get_assigned_devices(
     current_user: User = Depends(get_current_user),
 ):
     return device_service.get_assigned_devices(db)
+
+
+@router.get("/{device_uid}", response_model=DeviceOut)
+def get_device(
+    device_uid: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
 
 
 @router.post("/assign", response_model=DeviceOut)
@@ -83,6 +100,10 @@ def update_device_config(
         device_uid=device_uid,
         description=payload.description,
         location=payload.location,
+        status=payload.status,
+        last_maintenance=payload.last_maintenance,
+        maintenance_notes=payload.maintenance_notes,
+        changed_by=current_user.username,
     )
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")

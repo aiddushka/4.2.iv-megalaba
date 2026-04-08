@@ -15,6 +15,11 @@ export function RegisterDevicePage() {
         device_type: values.device_type,
         description: values.description,
         location_hint: values.location_hint,
+        controller: values.controller,
+        pin: Number(values.pin),
+        bus: values.bus,
+        bus_address: values.bus_address || undefined,
+        components: values.components.length ? values.components : undefined,
       });
       setResult(`Устройство зарегистрировано: id=${data.id}, status=${data.status}`);
     } catch (e: any) {

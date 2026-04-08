@@ -5,8 +5,24 @@ export interface Device {
   device_uid: string;
   device_type: string;
   description?: string | null;
+  controller?: string | null;
+  pin?: number | null;
+  bus?: string | null;
+  bus_address?: string | null;
+  components?: string[] | null;
   status: string;
   location?: string | null;
+  last_maintenance?: string | null;
+  maintenance_notes?: string | null;
+  change_history?:
+    | {
+        timestamp: string;
+        field: string;
+        old_value?: string | number | null;
+        new_value?: string | number | null;
+        changed_by?: string | null;
+      }[]
+    | null;
 }
 
 export interface AssignDevicePayload {
@@ -44,6 +60,9 @@ export async function registerDevice(payload: RegisterDevicePayload) {
 export interface UpdateDevicePayload {
   description?: string | null;
   location?: string | null;
+  status?: string | null;
+  last_maintenance?: string | null;
+  maintenance_notes?: string | null;
 }
 
 export async function updateDeviceConfig(
@@ -54,6 +73,11 @@ export async function updateDeviceConfig(
     `/devices/${encodeURIComponent(deviceUid)}`,
     payload
   );
+  return data;
+}
+
+export async function fetchDeviceByUid(deviceUid: string) {
+  const { data } = await apiClient.get<Device>(`/devices/${encodeURIComponent(deviceUid)}`);
   return data;
 }
 

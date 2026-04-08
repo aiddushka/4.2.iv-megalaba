@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardState, DashboardState } from "../api/dashboardApi";
-import { updateDeviceConfig } from "../api/devicesApi";
+import { Device, fetchDeviceByUid } from "../api/devicesApi";
+import { DeviceInfoBlock } from "../components/DeviceInfoBlock";
+import { DeviceManagementBlock } from "../components/DeviceManagementBlock";
+import { DeviceHistoryBlock } from "../components/DeviceHistoryBlock";
 
 interface DashboardPageProps {
   isAdmin: boolean;
@@ -10,9 +13,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [state, setState] = useState<DashboardState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingUid, setEditingUid] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState("");
-  const [editLocation, setEditLocation] = useState("");
+  const [detailsUid, setDetailsUid] = useState<string | null>(null);
+  const [detailsDevice, setDetailsDevice] = useState<Device | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -39,26 +42,19 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     };
   }, []);
 
-  const openEdit = (item: { device_uid: string; description?: string | null; location?: string | null }) => {
-    setEditingUid(item.device_uid);
-    setEditDescription(item.description ?? "");
-    setEditLocation(item.location ?? "");
-  };
-  const closeEdit = () => {
-    setEditingUid(null);
-  };
-  const saveEdit = async () => {
-    if (!editingUid) return;
+  const openDetails = async (deviceUid: string) => {
+    setDetailsUid(deviceUid);
+    setDetailsLoading(true);
     try {
-      await updateDeviceConfig(editingUid, {
-        description: editDescription || null,
-        location: editLocation || null,
-      });
-      closeEdit();
-      await load();
-    } catch {
-      // keep modal open on error
+      const data = await fetchDeviceByUid(deviceUid);
+      setDetailsDevice(data);
+    } finally {
+      setDetailsLoading(false);
     }
+  };
+  const closeDetails = () => {
+    setDetailsUid(null);
+    setDetailsDevice(null);
   };
 
   const cardStyle: React.CSSProperties = {
@@ -110,23 +106,21 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
                     {new Date(s.created_at).toLocaleTimeString()}
                   </span>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(s)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        background: "transparent",
-                        color: "#9ca3af",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Изменить
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openDetails(s.device_uid)}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Подробнее
+                  </button>
                 </div>
               </div>
             ))}
@@ -172,23 +166,21 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       </span>
                     </div>
                   </div>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(a)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        background: "transparent",
-                        color: "#9ca3af",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Изменить
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openDetails(a.device_uid)}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Подробнее
+                  </button>
                 </div>
               ))}
             </div>
@@ -196,7 +188,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
         </section>
       </div>
 
-      {editingUid && (
+      {detailsUid && (
         <div
           style={{
             position: "fixed",
@@ -207,7 +199,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             justifyContent: "center",
             zIndex: 10,
           }}
-          onClick={closeEdit}
+          onClick={closeDetails}
         >
           <div
             style={{
@@ -216,52 +208,39 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               borderRadius: 16,
               border: "1px solid #1f2937",
               minWidth: 320,
+              width: "min(920px, 95vw)",
+              maxHeight: "90vh",
+              overflow: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ marginBottom: "1rem", fontSize: "1rem" }}>
-              Конфигурация: {editingUid}
+              Подробнее: {detailsUid}
             </h3>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
-                Описание
-              </label>
-              <input
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: 8,
-                  border: "1px solid #1f2937",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", color: "#9ca3af", marginBottom: 4 }}>
-                Место установки
-              </label>
-              <input
-                value={editLocation}
-                onChange={(e) => setEditLocation(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: 8,
-                  border: "1px solid #1f2937",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
+            {detailsLoading && <p style={{ color: "#9ca3af" }}>Загружаем устройство...</p>}
+            {!detailsLoading && detailsDevice && (
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <DeviceInfoBlock device={detailsDevice} />
+                {isAdmin && (
+                  <>
+                    <DeviceManagementBlock
+                      device={detailsDevice}
+                      isAdmin={isAdmin}
+                      onSaved={async () => {
+                        const refreshed = await fetchDeviceByUid(detailsDevice.device_uid);
+                        setDetailsDevice(refreshed);
+                        await load();
+                      }}
+                    />
+                    <DeviceHistoryBlock device={detailsDevice} />
+                  </>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                onClick={closeEdit}
+                onClick={closeDetails}
                 style={{
                   padding: "0.5rem 1rem",
                   borderRadius: 8,
@@ -272,21 +251,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 }}
               >
                 Отмена
-              </button>
-              <button
-                type="button"
-                onClick={saveEdit}
-                style={{
-                  padding: "0.5rem 1rem",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(90deg,#22c55e,#22d3ee)",
-                  color: "#020617",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Сохранить
               </button>
             </div>
           </div>
