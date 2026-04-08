@@ -7,6 +7,7 @@ from pathlib import Path
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
+import app.models.device_link  # noqa: F401
 
 
 def create_app() -> FastAPI:

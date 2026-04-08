@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DeviceFormValues, DeviceForm } from "../components/DeviceForm";
 import { registerDevice } from "../api/devicesApi";
+import { createDeviceLink } from "../api/automationApi";
 
 export function RegisterDevicePage() {
   const [result, setResult] = useState<string | null>(null);
@@ -21,6 +22,16 @@ export function RegisterDevicePage() {
         bus_address: values.bus_address || undefined,
         components: values.components.length ? values.components : undefined,
       });
+      if (values.linked_device_uid.trim()) {
+        const isActuator = values.device_type.includes("ACTUATOR");
+        await createDeviceLink({
+          source_device_uid: isActuator ? values.linked_device_uid.trim() : values.device_uid,
+          target_device_uid: isActuator ? values.device_uid : values.linked_device_uid.trim(),
+          controller: values.controller,
+          description: values.link_description || undefined,
+          active: true,
+        });
+      }
       setResult(`Устройство зарегистрировано: id=${data.id}, status=${data.status}`);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка при регистрации устройства");

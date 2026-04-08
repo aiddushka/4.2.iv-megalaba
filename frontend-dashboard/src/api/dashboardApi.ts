@@ -20,6 +20,14 @@ export interface ActuatorState {
 export interface DashboardState {
   sensors: SensorState[];
   actuators: ActuatorState[];
+  links: {
+    id: number;
+    source_device_uid: string;
+    target_device_uid: string;
+    controller?: string | null;
+    description?: string | null;
+    active: boolean;
+  }[];
 }
 
 export async function fetchDashboardState() {

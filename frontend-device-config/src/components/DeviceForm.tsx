@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export interface DeviceFormValues {
   device_uid: string;
@@ -10,6 +10,8 @@ export interface DeviceFormValues {
   bus: string;
   bus_address: string;
   components: string[];
+  linked_device_uid: string;
+  link_description: string;
 }
 
 interface Props {
@@ -27,13 +29,75 @@ export function DeviceForm({ onSubmit }: Props) {
     bus: "Digital",
     bus_address: "",
     components: [],
+    linked_device_uid: "",
+    link_description: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [descriptionEdited, setDescriptionEdited] = useState(false);
+
+  const getDeviceTypeLabel = (type: string) => {
+    switch (type) {
+      case "TEMP_SENSOR":
+        return "Датчик температуры";
+      case "HUMIDITY_AIR_SENSOR":
+        return "Датчик влажности воздуха";
+      case "HUMIDITY_SOIL_SENSOR":
+        return "Датчик влажности почвы";
+      case "LIGHT_SENSOR":
+        return "Датчик освещённости";
+      case "IRRIGATION_ACTUATOR":
+        return "Актуатор полива";
+      case "HEATER_ACTUATOR":
+        return "Актуатор обогрева";
+      case "VENTILATION_ACTUATOR":
+        return "Актуатор вентиляции";
+      case "LIGHT_ACTUATOR":
+        return "Актуатор освещения";
+      default:
+        return "Устройство";
+    }
+  };
+
+  const buildDescriptionText = (currentValues: DeviceFormValues) => {
+    const kind = getDeviceTypeLabel(currentValues.device_type);
+    const pinLabel = currentValues.pin === "" ? "указанному GPIO пину" : `GPIO пину ${currentValues.pin}`;
+    const componentsLabel =
+      currentValues.components.length > 0 ? currentValues.components.join(", ") : "выбранным компонентам";
+
+    const busDetails =
+      currentValues.bus === "I2C"
+        ? `по шине I2C${currentValues.bus_address.trim() ? ` (адрес ${currentValues.bus_address.trim()})` : ""}`
+        : `по шине ${currentValues.bus}`;
+
+    if (currentValues.device_type.includes("ACTUATOR")) {
+      return `${kind} управляется через ${currentValues.controller}, подключён к ${pinLabel} ${busDetails} с использованием компонентов ${componentsLabel}. Логика срабатывания определяется сценарием управления.`;
+    }
+
+    return `${kind} подключён к ${pinLabel} контроллера ${currentValues.controller} ${busDetails}. Используются компоненты: ${componentsLabel}. Измерения выполняются по расписанию системы.`;
+  };
+  const generatedDescription = buildDescriptionText(values);
+
+  useEffect(() => {
+    if (!descriptionEdited) {
+      setValues((prev) => ({ ...prev, description: buildDescriptionText(prev) }));
+    }
+  }, [
+    descriptionEdited,
+    values.bus,
+    values.bus_address,
+    values.components,
+    values.controller,
+    values.device_type,
+    values.pin,
+  ]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
+    if (name === "description") {
+      setDescriptionEdited(true);
+    }
     if (name === "pin") {
       setValues((prev) => ({ ...prev, pin: value === "" ? "" : Number(value) }));
       return;
@@ -140,37 +204,6 @@ export function DeviceForm({ onSubmit }: Props) {
       </div>
 
       <div style={fieldStyle}>
-        <label style={labelStyle} htmlFor="description">
-          Описание
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          style={{ ...inputStyle, minHeight: 120 }}
-          value={values.description}
-          onChange={handleChange}
-          placeholder="Датчик DHT22 подключен к пину 2 Arduino Uno. Питание 5V. Данные снимаются каждые 5 секунд."
-          rows={6}
-          required
-        />
-      </div>
-
-      <div style={fieldStyle}>
-        <label style={labelStyle} htmlFor="location_hint">
-          Планируемое место установки
-        </label>
-        <input
-          id="location_hint"
-          name="location_hint"
-          style={inputStyle}
-          value={values.location_hint}
-          onChange={handleChange}
-          placeholder="например, Теплица А, левая грядка"
-          required
-        />
-      </div>
-
-      <div style={fieldStyle}>
         <label style={labelStyle} htmlFor="controller">
           Контроллер
         </label>
@@ -255,6 +288,69 @@ export function DeviceForm({ onSubmit }: Props) {
           <option value="Транзистор">Транзистор</option>
           <option value="Конденсатор">Конденсатор</option>
         </select>
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="description">
+          Описание
+        </label>
+        <textarea
+          id="description"
+          name="description"
+          style={{ ...inputStyle, minHeight: 120 }}
+          value={values.description}
+          onChange={handleChange}
+          placeholder={generatedDescription}
+          rows={6}
+          required
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="location_hint">
+          Планируемое место установки
+        </label>
+        <input
+          id="location_hint"
+          name="location_hint"
+          style={inputStyle}
+          value={values.location_hint}
+          onChange={handleChange}
+          placeholder="например, Теплица А, левая грядка"
+          required
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="linked_device_uid">
+          Связать с устройством (UID, опционально)
+        </label>
+        <input
+          id="linked_device_uid"
+          name="linked_device_uid"
+          style={inputStyle}
+          value={values.linked_device_uid}
+          onChange={handleChange}
+          placeholder={
+            values.device_type.includes("ACTUATOR")
+              ? "UID датчика, который управляет этим актуатором"
+              : "UID актуатора, которым управляет этот датчик"
+          }
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor="link_description">
+          Комментарий к связи (опционально)
+        </label>
+        <input
+          id="link_description"
+          name="link_description"
+          style={inputStyle}
+          value={values.link_description}
+          onChange={handleChange}
+          placeholder="например, полив включается при влажности почвы ниже порога"
+        />
       </div>
 
       <button

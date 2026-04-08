@@ -5,6 +5,7 @@ from app.api.auth import get_current_user
 from app.database.session import SessionLocal
 from app.models.actuator import Actuator
 from app.models.device import Device
+from app.models.device_link import DeviceLink
 from app.models.sensor_data import SensorData
 from app.models.user import User
 
@@ -67,6 +68,17 @@ def get_dashboard_state(
                 **(_device_info(db, a.device_uid)),
             }
             for a in actuators
+        ],
+        "links": [
+            {
+                "id": link.id,
+                "source_device_uid": link.source_device_uid,
+                "target_device_uid": link.target_device_uid,
+                "controller": link.controller,
+                "description": link.description,
+                "active": link.active,
+            }
+            for link in db.query(DeviceLink).order_by(DeviceLink.id.desc()).all()
         ],
     }
 
