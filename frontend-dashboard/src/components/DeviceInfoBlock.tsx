@@ -17,8 +17,18 @@ export function DeviceInfoBlock({ device }: Props) {
     color: "#9ca3af",
     fontSize: "0.8rem",
   };
-  const imageName = device.device_type.toLowerCase();
-  const previewUrl = `http://localhost:8000/static/images/${imageName}.png`;
+  const imageByDeviceType: Record<string, string> = {
+    TEMP_SENSOR: "AUno_датчик_температуры.png",
+    HUMIDITY_AIR_SENSOR: "AUno_датчик_влажности_почвы.png",
+    HUMIDITY_SOIL_SENSOR: "AUno_датчик_влажности_почвы.png",
+    LIGHT_SENSOR: "AUno_датчик_освещенности.png",
+    IRRIGATION_ACTUATOR: "AUno_Актуатор_полив_с_мотором.png",
+    HEATER_ACTUATOR: "AUno_прогревательный_элемент.png",
+    VENTILATION_ACTUATOR: "AUno_актуатор_вентеляции.png",
+    LIGHT_ACTUATOR: "AUno_актуратор_освещения.png",
+  };
+  const imageName = imageByDeviceType[device.device_type] || "AUno_датчик_температуры.png";
+  const previewUrl = `http://localhost:8000/static/images/ArduinoUnoComponents/${encodeURIComponent(imageName)}`;
   const rowStyle: React.CSSProperties = { borderBottom: "1px solid #1f2937" };
   const tdStyle: React.CSSProperties = { padding: "0.4rem 0.5rem", fontSize: "0.85rem" };
 
@@ -53,7 +63,7 @@ export function DeviceInfoBlock({ device }: Props) {
             </tbody>
           </table>
         </div>
-        <div style={{ ...labelStyle, marginTop: "0.5rem" }}>Статическое изображение: {imageName}.png</div>
+        <div style={{ ...labelStyle, marginTop: "0.5rem" }}>Статическое изображение: {imageName}</div>
       </div>
     </div>
   );

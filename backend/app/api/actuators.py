@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_current_user
 from app.database.session import SessionLocal
+from app.models.user import User
 from app.schemas.actuator_schema import ActuatorCommand, ActuatorStateOut
 from app.services import actuator_service
 
@@ -17,7 +19,13 @@ def get_db():
 
 
 @router.post("/control", response_model=ActuatorStateOut)
-def control_actuator(cmd: ActuatorCommand, db: Session = Depends(get_db)):
+def control_actuator(
+    cmd: ActuatorCommand,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     actuator = actuator_service.set_actuator_state(
         db=db,
         device_uid=cmd.device_uid,
@@ -32,7 +40,15 @@ def control_actuator(cmd: ActuatorCommand, db: Session = Depends(get_db)):
 
 
 @router.get("/status", response_model=list[ActuatorStateOut])
-def get_actuators_status(db: Session = Depends(get_db)):
+def get_actuators_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin and not current_user.can_view_dashboard:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ к дашборду запрещён. Обратитесь к администратору.",
+        )
     actuators = actuator_service.get_actuators(db)
     return [
         ActuatorStateOut(
@@ -42,32 +58,3 @@ def get_actuators_status(db: Session = Depends(get_db)):
         )
         for a in actuators
     ]
-
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.database.session import SessionLocal
-
-router = APIRouter(prefix="/actuators", tags=["Actuators"])
-
-actuator_states = {}  # хранение текущего состояния актуаторов в памяти
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@router.post("/control")
-def control_actuator(payload: dict):
-    device_uid = payload.get("device_uid")
-    action = payload.get("action")  # ON / OFF
-    if not device_uid or action not in ["ON", "OFF"]:
-        return {"error": "device_uid and valid action required"}
-
-    actuator_states[device_uid] = action
-    return {"status": "ok", "device_uid": device_uid, "action": action}
-
-@router.get("/status")
-def get_actuator_status():
-    return actuator_states

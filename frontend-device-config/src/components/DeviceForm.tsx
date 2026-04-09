@@ -146,8 +146,18 @@ export function DeviceForm({ onSubmit }: Props) {
     fontSize: "0.85rem",
     color: "#9ca3af",
   };
-  const imageName = values.device_type.toLowerCase();
-  const previewUrl = `http://localhost:8000/static/images/${imageName}.png`;
+  const imageByDeviceType: Record<string, string> = {
+    TEMP_SENSOR: "AUno_датчик_температуры.png",
+    HUMIDITY_AIR_SENSOR: "AUno_датчик_влажности_почвы.png",
+    HUMIDITY_SOIL_SENSOR: "AUno_датчик_влажности_почвы.png",
+    LIGHT_SENSOR: "AUno_датчик_освещенности.png",
+    IRRIGATION_ACTUATOR: "AUno_Актуатор_полив_с_мотором.png",
+    HEATER_ACTUATOR: "AUno_прогревательный_элемент.png",
+    VENTILATION_ACTUATOR: "AUno_актуатор_вентеляции.png",
+    LIGHT_ACTUATOR: "AUno_актуратор_освещения.png",
+  };
+  const previewImageName = imageByDeviceType[values.device_type] || "AUno_датчик_температуры.png";
+  const previewUrl = `http://localhost:8000/static/images/ArduinoUnoComponents/${encodeURIComponent(previewImageName)}`;
 
   return (
     <form onSubmit={handleSubmit}>

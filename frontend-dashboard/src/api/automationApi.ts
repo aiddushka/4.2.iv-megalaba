@@ -7,6 +7,9 @@ export interface DeviceLink {
   controller?: string | null;
   description?: string | null;
   active: boolean;
+  auto_control_enabled?: boolean;
+  min_value?: number | null;
+  max_value?: number | null;
 }
 
 export interface CreateDeviceLinkPayload {
@@ -15,6 +18,9 @@ export interface CreateDeviceLinkPayload {
   controller?: string;
   description?: string;
   active?: boolean;
+  auto_control_enabled?: boolean;
+  min_value?: number;
+  max_value?: number;
 }
 
 export async function createDeviceLink(payload: CreateDeviceLinkPayload) {
@@ -24,5 +30,17 @@ export async function createDeviceLink(payload: CreateDeviceLinkPayload) {
 
 export async function deleteDeviceLink(linkId: number) {
   const { data } = await apiClient.delete<{ ok: boolean }>(`/automation/links/${linkId}`);
+  return data;
+}
+
+export interface UpdateDeviceLinkPayload {
+  description?: string;
+  auto_control_enabled?: boolean;
+  min_value?: number | null;
+  max_value?: number | null;
+}
+
+export async function updateDeviceLink(linkId: number, payload: UpdateDeviceLinkPayload) {
+  const { data } = await apiClient.patch<DeviceLink>(`/automation/links/${linkId}`, payload);
   return data;
 }

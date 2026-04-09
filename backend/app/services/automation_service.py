@@ -46,6 +46,9 @@ def create_device_link(
     controller: str | None = None,
     description: str | None = None,
     active: bool = True,
+    auto_control_enabled: bool = False,
+    min_value: float | None = None,
+    max_value: float | None = None,
 ) -> DeviceLink:
     link = DeviceLink(
         source_device_uid=source_device_uid,
@@ -53,6 +56,9 @@ def create_device_link(
         controller=controller,
         description=description,
         active=active,
+        auto_control_enabled=auto_control_enabled,
+        min_value=min_value,
+        max_value=max_value,
     )
     db.add(link)
     db.commit()
@@ -77,4 +83,26 @@ def delete_device_link(db: Session, link_id: int) -> bool:
     db.delete(link)
     db.commit()
     return True
+
+
+def update_device_link(
+    db: Session,
+    link_id: int,
+    auto_control_enabled: bool | None = None,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    description: str | None = None,
+) -> DeviceLink | None:
+    link = db.query(DeviceLink).filter(DeviceLink.id == link_id).first()
+    if not link:
+        return None
+    if auto_control_enabled is not None:
+        link.auto_control_enabled = auto_control_enabled
+    link.min_value = min_value
+    link.max_value = max_value
+    if description is not None:
+        link.description = description
+    db.commit()
+    db.refresh(link)
+    return link
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardState, DashboardState } from "../api/dashboardApi";
 import { Device, fetchAssignedDevices, fetchDeviceByUid } from "../api/devicesApi";
-import { createDeviceLink, deleteDeviceLink } from "../api/automationApi";
+import { createDeviceLink, deleteDeviceLink, updateDeviceLink } from "../api/automationApi";
+import { controlActuator } from "../api/actuatorsApi";
 import { DeviceInfoBlock } from "../components/DeviceInfoBlock";
 import { DeviceManagementBlock } from "../components/DeviceManagementBlock";
 import { DeviceHistoryBlock } from "../components/DeviceHistoryBlock";
@@ -22,6 +23,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [linkTargetUid, setLinkTargetUid] = useState("");
   const [linkController, setLinkController] = useState("");
   const [linkDescription, setLinkDescription] = useState("");
+  const [linkMinValue, setLinkMinValue] = useState("");
+  const [linkMaxValue, setLinkMaxValue] = useState("");
+  const [linkAutoControlEnabled, setLinkAutoControlEnabled] = useState(false);
   const [linkSaving, setLinkSaving] = useState(false);
 
   const load = async () => {
@@ -99,8 +103,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
         controller: linkController || undefined,
         description: linkDescription || undefined,
         active: true,
+        auto_control_enabled: linkAutoControlEnabled,
+        min_value: linkMinValue.trim() ? Number(linkMinValue) : undefined,
+        max_value: linkMaxValue.trim() ? Number(linkMaxValue) : undefined,
       });
       setLinkDescription("");
+      setLinkMinValue("");
+      setLinkMaxValue("");
+      setLinkAutoControlEnabled(false);
       await load();
     } finally {
       setLinkSaving(false);
@@ -109,6 +119,21 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
 
   const removeLink = async (linkId: number) => {
     await deleteDeviceLink(linkId);
+    await load();
+  };
+
+  const toggleAutoMode = async (linkId: number, current: boolean) => {
+    await updateDeviceLink(linkId, { auto_control_enabled: !current });
+    await load();
+  };
+
+  const setLinkThresholds = async (linkId: number, minValue?: number | null, maxValue?: number | null) => {
+    await updateDeviceLink(linkId, { min_value: minValue ?? null, max_value: maxValue ?? null });
+    await load();
+  };
+
+  const handleManualActuator = async (deviceUid: string, actuatorType: string, action: "ON" | "OFF") => {
+    await controlActuator({ device_uid: deviceUid, actuator_type: actuatorType, action });
     await load();
   };
 
@@ -145,6 +170,30 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                     {s.sensor_type || "sensor"}: {s.value}
+                  </div>
+                  <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        display: "inline-block",
+                        background:
+                          s.indicator === "green"
+                            ? "#22c55e"
+                            : s.indicator === "yellow"
+                              ? "#facc15"
+                              : s.indicator === "red"
+                                ? "#ef4444"
+                                : "#6b7280",
+                      }}
+                    />
+                    <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                      Индикатор: {s.indicator || "unknown"}
+                      {s.min_value != null || s.max_value != null
+                        ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
+                        : ""}
+                    </span>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -241,21 +290,57 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openDetails(a.device_uid)}
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "transparent",
-                      color: "#9ca3af",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Подробнее
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {isAdmin && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "ON")}
+                          style={{
+                            padding: "0.2rem 0.45rem",
+                            fontSize: "0.72rem",
+                            borderRadius: 6,
+                            border: "1px solid #14532d",
+                            background: "transparent",
+                            color: "#bbf7d0",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ON
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "OFF")}
+                          style={{
+                            padding: "0.2rem 0.45rem",
+                            fontSize: "0.72rem",
+                            borderRadius: 6,
+                            border: "1px solid #7f1d1d",
+                            background: "transparent",
+                            color: "#fecaca",
+                            cursor: "pointer",
+                          }}
+                        >
+                          OFF
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openDetails(a.device_uid)}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: 6,
+                        border: "1px solid #374151",
+                        background: "transparent",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Подробнее
+                    </button>
+                  </div>
                 </div>
               ))}
               {actuatorDevicesWithoutData.map((d) => (
@@ -312,7 +397,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             style={{
               display: "grid",
               gap: "0.5rem",
-              gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr 0.8fr auto",
               marginBottom: "1rem",
             }}
           >
@@ -352,6 +437,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               placeholder="Комментарий связи"
               style={{ padding: "0.5rem", borderRadius: 8, background: "#0f172a", color: "#e5e7eb", border: "1px solid #1f2937" }}
             />
+            <input
+              value={linkMinValue}
+              onChange={(e) => setLinkMinValue(e.target.value)}
+              placeholder="Мин. норма"
+              type="number"
+              style={{ padding: "0.5rem", borderRadius: 8, background: "#0f172a", color: "#e5e7eb", border: "1px solid #1f2937" }}
+            />
+            <input
+              value={linkMaxValue}
+              onChange={(e) => setLinkMaxValue(e.target.value)}
+              placeholder="Макс. норма"
+              type="number"
+              style={{ padding: "0.5rem", borderRadius: 8, background: "#0f172a", color: "#e5e7eb", border: "1px solid #1f2937" }}
+            />
             <button
               type="button"
               onClick={saveLink}
@@ -368,6 +467,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             >
               {linkSaving ? "Сохраняем..." : "Связать"}
             </button>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#9ca3af", fontSize: "0.8rem" }}>
+              <input
+                type="checkbox"
+                checked={linkAutoControlEnabled}
+                onChange={(e) => setLinkAutoControlEnabled(e.target.checked)}
+              />
+              Авто
+            </label>
           </div>
         )}
         <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -388,23 +495,67 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     .filter(Boolean)
                     .join(" · ") || "Без дополнительных данных"}
                 </div>
+                <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 4 }}>
+                  Авто: {link.auto_control_enabled ? "вкл" : "выкл"} · Пороги: {link.min_value ?? "-"}..{link.max_value ?? "-"}
+                </div>
               </div>
               {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => removeLink(link.id)}
-                  style={{
-                    padding: "0.25rem 0.5rem",
-                    fontSize: "0.75rem",
-                    borderRadius: 6,
-                    border: "1px solid #7f1d1d",
-                    background: "transparent",
-                    color: "#fca5a5",
-                    cursor: "pointer",
-                  }}
-                >
-                  Удалить
-                </button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleAutoMode(link.id, Boolean(link.auto_control_enabled))}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Авто {link.auto_control_enabled ? "OFF" : "ON"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const minRaw = window.prompt("Минимальная норма", link.min_value?.toString() ?? "");
+                      const maxRaw = window.prompt("Максимальная норма", link.max_value?.toString() ?? "");
+                      if (minRaw === null || maxRaw === null) return;
+                      setLinkThresholds(
+                        link.id,
+                        minRaw.trim() === "" ? null : Number(minRaw),
+                        maxRaw.trim() === "" ? null : Number(maxRaw),
+                      );
+                    }}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Пороги
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeLink(link.id)}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #7f1d1d",
+                      background: "transparent",
+                      color: "#fca5a5",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
               )}
             </div>
           ))}

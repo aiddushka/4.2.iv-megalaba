@@ -7,6 +7,9 @@ export interface SensorState {
   created_at: string;
   description?: string | null;
   location?: string | null;
+  min_value?: number | null;
+  max_value?: number | null;
+  indicator?: "green" | "yellow" | "red" | "unknown";
 }
 
 export interface ActuatorState {
@@ -27,6 +30,9 @@ export interface DashboardState {
     controller?: string | null;
     description?: string | null;
     active: boolean;
+    auto_control_enabled?: boolean;
+    min_value?: number | null;
+    max_value?: number | null;
   }[];
 }
 

@@ -25,6 +25,29 @@ def _device_info(db: Session, device_uid: str) -> dict:
     return {"description": d.description if d else None, "location": d.location if d else None}
 
 
+def _sensor_indicator(value: float, min_value: float | None, max_value: float | None) -> str:
+    if min_value is None and max_value is None:
+        return "unknown"
+    if min_value is not None and max_value is not None:
+        band = max((max_value - min_value) * 0.1, 1e-6)
+        if min_value <= value <= max_value:
+            return "green"
+        if (min_value - band) <= value <= (max_value + band):
+            return "yellow"
+        return "red"
+    if min_value is not None:
+        if value >= min_value:
+            return "green"
+        if value >= min_value * 0.9:
+            return "yellow"
+        return "red"
+    if value <= max_value:
+        return "green"
+    if value <= max_value * 1.1:
+        return "yellow"
+    return "red"
+
+
 @router.get("/state")
 def get_dashboard_state(
     db: Session = Depends(get_db),
@@ -50,6 +73,17 @@ def get_dashboard_state(
             continue
         seen_sensor_uids.add(s.device_uid)
         info = _device_info(db, s.device_uid)
+        link = (
+            db.query(DeviceLink)
+            .filter(
+                DeviceLink.source_device_uid == s.device_uid,
+                DeviceLink.active == True,
+            )
+            .order_by(DeviceLink.id.desc())
+            .first()
+        )
+        min_value = link.min_value if link else None
+        max_value = link.max_value if link else None
         sensors_out.append({
             "device_uid": s.device_uid,
             "sensor_type": s.sensor_type,
@@ -57,6 +91,9 @@ def get_dashboard_state(
             "created_at": s.created_at,
             "description": info["description"],
             "location": info["location"],
+            "min_value": min_value,
+            "max_value": max_value,
+            "indicator": _sensor_indicator(s.value, min_value, max_value),
         })
     return {
         "sensors": sensors_out,
@@ -77,6 +114,9 @@ def get_dashboard_state(
                 "controller": link.controller,
                 "description": link.description,
                 "active": link.active,
+                "auto_control_enabled": link.auto_control_enabled,
+                "min_value": link.min_value,
+                "max_value": link.max_value,
             }
             for link in db.query(DeviceLink).order_by(DeviceLink.id.desc()).all()
         ],

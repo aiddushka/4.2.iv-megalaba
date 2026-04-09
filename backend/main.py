@@ -51,6 +51,36 @@ def create_app() -> FastAPI:
             conn.execute(
                 text("ALTER TABLE devices ALTER COLUMN status SET DEFAULT 'active'")
             )
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS device_links ("
+                    "id SERIAL PRIMARY KEY, "
+                    "source_device_uid VARCHAR(100) NOT NULL, "
+                    "target_device_uid VARCHAR(100) NOT NULL, "
+                    "controller VARCHAR(100), "
+                    "description VARCHAR(255), "
+                    "active BOOLEAN NOT NULL DEFAULT TRUE, "
+                    "auto_control_enabled BOOLEAN NOT NULL DEFAULT FALSE, "
+                    "min_value DOUBLE PRECISION, "
+                    "max_value DOUBLE PRECISION, "
+                    "created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE device_links ADD COLUMN IF NOT EXISTS auto_control_enabled BOOLEAN DEFAULT FALSE"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE device_links ADD COLUMN IF NOT EXISTS min_value DOUBLE PRECISION"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE device_links ADD COLUMN IF NOT EXISTS max_value DOUBLE PRECISION"
+                )
+            )
     except Exception:
         pass
 

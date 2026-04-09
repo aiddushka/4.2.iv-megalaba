@@ -29,10 +29,20 @@ class DeviceLinkBase(BaseModel):
     controller: str | None = None
     description: str | None = None
     active: bool = True
+    auto_control_enabled: bool = False
+    min_value: float | None = None
+    max_value: float | None = None
 
 
 class DeviceLinkCreate(DeviceLinkBase):
     ...
+
+
+class DeviceLinkUpdate(BaseModel):
+    description: str | None = None
+    auto_control_enabled: bool | None = None
+    min_value: float | None = None
+    max_value: float | None = None
 
 
 class DeviceLinkOut(DeviceLinkBase):
