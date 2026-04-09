@@ -6,6 +6,7 @@ import { controlActuator } from "../api/actuatorsApi";
 import { DeviceInfoBlock } from "../components/DeviceInfoBlock";
 import { DeviceManagementBlock } from "../components/DeviceManagementBlock";
 import { DeviceHistoryBlock } from "../components/DeviceHistoryBlock";
+import { deleteDeviceConfig } from "../api/devicesApi";
 
 interface DashboardPageProps {
   isAdmin: boolean;
@@ -137,6 +138,17 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     await load();
   };
 
+  const handleDelete = async (deviceUid: string) => {
+  if (confirm(`Удалить устройство "${deviceUid}"? Это действие нельзя отменить.`)) {
+    try {
+      await deleteDeviceConfig(deviceUid);
+      await load(); // перезагрузить страницу
+    } catch (error) {
+      setError("Не удалось удалить устройство");
+    }
+  }
+};
+
   return (
     <>
       <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "2fr 1fr" }}>
@@ -158,97 +170,133 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               Данных с датчиков пока нет. Запусти эмуляторы в папке `device-emulator/sensors`.
             </p>
           )}
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            {state?.sensors.map((s) => (
-              <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
-                <div>
-                  <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
-                  {(s.description || s.location) && (
-                    <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                      {[s.description, s.location].filter(Boolean).join(" · ")}
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              {state?.sensors.map((s) => (
+                <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
+                  <div>
+                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
+                    {(s.description || s.location) && (
+                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                        {[s.description, s.location].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                      {s.sensor_type || "sensor"}: {s.value}
                     </div>
-                  )}
-                  <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                    {s.sensor_type || "sensor"}: {s.value}
+                    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          display: "inline-block",
+                          background:
+                            s.indicator === "green"
+                              ? "#22c55e"
+                              : s.indicator === "yellow"
+                                ? "#facc15"
+                                : s.indicator === "red"
+                                  ? "#ef4444"
+                                  : "#6b7280",
+                        }}
+                      />
+                      <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                        Индикатор: {s.indicator || "unknown"}
+                        {s.min_value != null || s.max_value != null
+                          ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
+                          : ""}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: "50%",
-                        display: "inline-block",
-                        background:
-                          s.indicator === "green"
-                            ? "#22c55e"
-                            : s.indicator === "yellow"
-                              ? "#facc15"
-                              : s.indicator === "red"
-                                ? "#ef4444"
-                                : "#6b7280",
-                      }}
-                    />
-                    <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                      Индикатор: {s.indicator || "unknown"}
-                      {s.min_value != null || s.max_value != null
-                        ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
-                        : ""}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                      {new Date(s.created_at).toLocaleTimeString()}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => openDetails(s.device_uid)}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: 6,
+                        border: "1px solid #374151",
+                        background: "transparent",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Подробнее
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(s.device_uid)}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #7f1d1d",
+                          background: "transparent",
+                          color: "#fca5a5",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                    {new Date(s.created_at).toLocaleTimeString()}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => openDetails(s.device_uid)}
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "transparent",
-                      color: "#9ca3af",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Подробнее
-                  </button>
-                </div>
-              </div>
-            ))}
-            {sensorDevicesWithoutData.map((d) => (
-              <div key={d.device_uid} style={cardStyle}>
-                <div>
-                  <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
-                  {(d.description || d.location) && (
-                    <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                      {[d.description, d.location].filter(Boolean).join(" · ")}
+              ))}
+              {sensorDevicesWithoutData.map((d) => (
+                <div key={d.device_uid} style={cardStyle}>
+                  <div>
+                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
+                    {(d.description || d.location) && (
+                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                        {[d.description, d.location].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                      {d.device_type}: ожидание первых данных
                     </div>
-                  )}
-                  <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                    {d.device_type}: ожидание первых данных
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => openDetails(d.device_uid)}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: 6,
+                        border: "1px solid #374151",
+                        background: "transparent",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Подробнее
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(d.device_uid)}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #7f1d1d",
+                          background: "transparent",
+                          color: "#fca5a5",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openDetails(d.device_uid)}
-                  style={{
-                    padding: "0.25rem 0.5rem",
-                    fontSize: "0.75rem",
-                    borderRadius: 6,
-                    border: "1px solid #374151",
-                    background: "transparent",
-                    color: "#9ca3af",
-                    cursor: "pointer",
-                  }}
-                >
-                  Подробнее
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </section>
 
         <section
@@ -340,6 +388,23 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     >
                       Подробнее
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(a.device_uid)}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #7f1d1d",
+                          background: "transparent",
+                          color: "#fca5a5",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -356,21 +421,40 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       {d.device_type}: состояние ещё не получено
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openDetails(d.device_uid)}
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "transparent",
-                      color: "#9ca3af",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Подробнее
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => openDetails(d.device_uid)}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.75rem",
+                        borderRadius: 6,
+                        border: "1px solid #374151",
+                        background: "transparent",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Подробнее
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(d.device_uid)}
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          borderRadius: 6,
+                          border: "1px solid #7f1d1d",
+                          background: "transparent",
+                          color: "#fca5a5",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

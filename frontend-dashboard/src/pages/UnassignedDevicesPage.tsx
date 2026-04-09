@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { assignDevice, fetchUnassignedDevices, Device, updateDeviceConfig } from "../api/devicesApi";
+import { deleteDeviceConfig, assignDevice, fetchUnassignedDevices, Device, updateDeviceConfig } from "../api/devicesApi";
 
 export function UnassignedDevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -37,6 +37,17 @@ export function UnassignedDevicesPage() {
       await load();
     } finally {
       setAssigningId(null);
+    }
+  };
+
+  const handleCancel = async (device: Device) => {
+    if (confirm(`Удалить регистрацию устройства ${device.device_uid}?`)) {
+      try {
+        await deleteDeviceConfig(device.device_uid);
+        await load();
+      } catch (e) {
+        setError("Не удалось удалить регистрацию");
+      } 
     }
   };
 
@@ -84,25 +95,42 @@ export function UnassignedDevicesPage() {
                 <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>{d.description}</div>
               )}
             </div>
-            <button
-              onClick={() => handleAssign(d)}
-              disabled={assigningId === d.id}
-              style={{
-                padding: "0.4rem 0.9rem",
-                borderRadius: 999,
-                border: "none",
-                background:
-                  assigningId === d.id
-                    ? "#4b5563"
-                    : "linear-gradient(90deg,#22c55e,#22c55e)",
-                color: "#020617",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                cursor: assigningId === d.id ? "default" : "pointer",
-              }}
-            >
-              {assigningId === d.id ? "Устанавливаем..." : "Установить"}
-            </button>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                onClick={() => handleAssign(d)}
+                disabled={assigningId === d.id}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: 999,
+                  border: "none",
+                  background:
+                    assigningId === d.id
+                      ? "#4b5563"
+                      : "linear-gradient(90deg,#22c55e,#22c55e)",
+                  color: "#020617",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: assigningId === d.id ? "default" : "pointer",
+                }}
+              >
+                {assigningId === d.id ? "Устанавливаем..." : "Установить"}
+              </button>
+              <button
+                onClick={() => handleCancel(d)}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: 999,
+                  border: "none",
+                  background: "linear-gradient(90deg,#dc2626,#dc2626)",
+                  color: "#ffffff",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Удалить
+              </button>
+            </div>
           </div>
         ))}
       </div>

@@ -4,8 +4,12 @@ from sqlalchemy.orm import Session
 from app.api.auth import get_current_user
 from app.database.session import SessionLocal
 from app.models.user import User
+from app.models.device import Device        
+from app.models.device_link import DeviceLink 
 from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
 from app.services import device_service
+
+router = APIRouter(prefix="/devices", tags=["Devices"])
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -84,6 +88,33 @@ def assign_device(
         raise HTTPException(status_code=404, detail="Device not found")
     return device
 
+
+@router.delete("/{device_uid}")
+async def delete_device(
+    device_uid: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Только администратор может удалять устройства
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Только администратор может удалять устройства")
+    
+    # Найти устройство
+    device = db.query(Device).filter(Device.device_uid == device_uid).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Устройство не найдено")
+    
+    # Удалить связанные device_links
+    db.query(DeviceLink).filter(
+        (DeviceLink.source_device_uid == device_uid) | 
+        (DeviceLink.target_device_uid == device_uid)
+    ).delete()
+    
+    # Удалить устройство
+    db.delete(device)
+    db.commit()
+    
+    return {"ok": True, "message": f"Устройство {device_uid} удалено"}
 
 @router.patch("/{device_uid}", response_model=DeviceOut)
 def update_device_config(
