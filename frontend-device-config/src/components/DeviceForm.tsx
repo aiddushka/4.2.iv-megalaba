@@ -196,12 +196,13 @@ export function DeviceForm({ onSubmit }: Props) {
           <option value="VENTILATION_ACTUATOR">Актуатор вентиляции</option>
           <option value="LIGHT_ACTUATOR">Актуатор освещения</option>
         </select>
-        <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p style={{ color: "#9ca3af", fontSize: "0.8rem", textAlign: "left"  }}>Превью устройства</p>
           <img
             src={previewUrl}
             alt={values.device_type}
-            width={50}
-            height={50}
+            width={790}
+            height={400}
             style={{ borderRadius: 6, border: "1px solid #1f2937", objectFit: "cover", background: "#0f172a" }}
             onError={(e) => {
               const target = e.currentTarget;
@@ -209,7 +210,6 @@ export function DeviceForm({ onSubmit }: Props) {
               target.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50'><rect width='100%' height='100%' fill='%230f172a'/><text x='50%' y='54%' text-anchor='middle' fill='%239ca3af' font-size='10' font-family='Arial'>No image</text></svg>";
             }}
           />
-          <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>Превью устройства</span>
         </div>
       </div>
 

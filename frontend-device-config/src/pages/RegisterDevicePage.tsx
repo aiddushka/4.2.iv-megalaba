@@ -41,7 +41,7 @@ export function RegisterDevicePage() {
   return (
     <div
       style={{
-        maxWidth: 520,
+        maxWidth: 800,
         margin: "0 auto",
         padding: "2rem",
         background: "#020617",

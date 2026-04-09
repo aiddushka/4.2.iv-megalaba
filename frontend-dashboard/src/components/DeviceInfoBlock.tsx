@@ -40,8 +40,8 @@ export function DeviceInfoBlock({ device }: Props) {
           <img
             src={previewUrl}
             alt={device.device_type}
-            width={86}
-            height={86}
+            width={400}
+            height={200}
             style={{ borderRadius: 8, border: "1px solid #1f2937", objectFit: "cover", background: "#0f172a" }}
             onError={(e) => {
               const target = e.currentTarget;
