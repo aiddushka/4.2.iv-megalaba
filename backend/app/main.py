@@ -41,8 +41,8 @@ def create_app() -> FastAPI:
         pass
 
     app = FastAPI(title="IoT Greenhouse API")
-    project_root = Path(__file__).resolve().parent.parent.parent
-    images_dir = project_root / "images"
+    backend_root = Path(__file__).resolve().parent.parent
+    images_dir = backend_root / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
 
