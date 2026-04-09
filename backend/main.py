@@ -8,7 +8,7 @@ from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
 import app.models.device_link  # noqa: F401
-xui
+
 
 def create_app() -> FastAPI:
     # создаем таблицы в БД
