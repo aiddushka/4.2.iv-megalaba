@@ -165,3 +165,5 @@ def create_sensor_data(payload: SensorDataCreate, db: Session = Depends(get_db))
 @router.get("/", response_model=list[SensorDataOut])
 def get_sensor_data(db: Session = Depends(get_db)):
     return sensor_service.get_all_sensor_data(db)
+
+

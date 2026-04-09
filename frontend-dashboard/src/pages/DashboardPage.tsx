@@ -150,10 +150,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     await load();
   };
 
+  
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   const handleDelete = async (deviceUid: string) => {
     if (confirm(`Удалить устройство "${deviceUid}"? Это действие нельзя отменить.`)) {
       try {
         await deleteDeviceConfig(deviceUid);
+        setRefreshTrigger(prev => prev + 1);  // форсируем ререндер
         await load();
       } catch (error) {
         setError("Не удалось удалить устройство");
@@ -161,9 +165,22 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     }
   };
 
+  // В useEffect добавить refreshTrigger в зависимости
+  useEffect(() => {
+    let mounted = true;
+    load();
+    const id = setInterval(() => {
+      if (mounted) load();
+    }, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, [refreshTrigger]);  // ← добавить
+
   return (
     <>
-      <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "2fr 1fr" }}>
+      <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr 1fr" }}>
         <section
           style={{
             padding: "1.5rem",
@@ -190,11 +207,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   const isActive = device?.status === "active";
                   return (
                     <div>
-                      <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
+                      <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID датчика: "}{s.device_uid}</div>
                       {isActive ? (
                         <>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                            {s.sensor_type || "sensor"}: {s.value}
+                            {"Тип датчика:"} {device?.device_type || s.sensor_type || "sensor"}
+                          </div>
+                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                            {"Значение:"} {s.value}
                           </div>
                           <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
                             <span
@@ -214,7 +234,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                               }}
                             />
                             <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                              Индикатор: {s.indicator || "white"}
+                              Состояние:{" "}
+                              {s.indicator === "red"
+                                ? "Критическое"
+                                : s.indicator === "yellow"
+                                ? "Граничное"
+                                : s.indicator === "green"
+                                ? "Хорошее"
+                                : "Не связан"}
                               {s.min_value != null || s.max_value != null
                                 ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
                                 : ""}
@@ -269,9 +296,12 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             {sensorDevicesWithoutData.map((d) => (
               <div key={d.device_uid} style={cardStyle}>
                 <div>
-                  <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
+                  <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID датчика: "}{d.device_uid}</div>
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                    {d.device_type}: {d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
+                    {"Тип датчика:"} {d.device_type || "SENSOR"}
+                  </div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                    {"Статус: "}{d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -338,27 +368,31 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     return (
                       <>
                         <div>
-                          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{a.device_uid}</div>
+                          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID актуатора: "}{a.device_uid}</div>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                            {a.actuator_type}:{" "}
-                            <span
-                              style={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: "50%",
-                                display: "inline-block",
-                                marginRight: 6,
-                                background: a.state === "ON" ? "#22c55e" : "#ffffff",
-                              }}
-                            />
-                            <span
-                              style={{
-                                color: a.state === "ON" ? "#bbf7d0" : "#ffffff",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {a.state}
-                            </span>
+                            {"Тип устройства: "}{a.actuator_type}:{" "}
+                            <div>
+                              <span style = {{fontSize: "0.95rem", fontWeight: 500}}> {"Статус: "}</span>
+                              <span
+                                style={{
+                                  color: a.state === "ON " ? "#bbf7d0" : "#ffffff",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {a.state}
+                              </span><span>{"  "}</span>
+                              <span
+                                style={{
+                                  width: 10,
+                                  height: 10,
+                                  borderRadius: "50%",
+                                  display: "inline-block",
+                                  marginRight: 6,
+                                  background: a.state === "ON" ? "#22c55e" : "#ffffff",
+                                }}
+                              />
+                            </div>
+
                           </div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -441,9 +475,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               {actuatorDevicesWithoutData.map((d) => (
                 <div key={d.device_uid} style={cardStyle}>
                   <div>
-                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
+                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID актуатора:"} {d.device_uid}</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                      {d.device_type}: состояние ещё не получено
+                      {"Тип устройства"}{d.device_type}: состояние ещё не получено
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -596,7 +630,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             <div key={link.id} style={cardStyle}>
               <div>
                 <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                  {link.source_device_uid} {"->"} {link.target_device_uid}
+                  {"[Датчик:"} {link.source_device_uid}{"] связан с [Актуатор:"}  {link.target_device_uid}{"]"}
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
                   {[link.controller ? `Контроллер: ${link.controller}` : null, link.description]
