@@ -315,38 +315,6 @@ export function DeviceForm({ onSubmit }: Props) {
         />
       </div>
 
-      <div style={fieldStyle}>
-        <label style={labelStyle} htmlFor="linked_device_uid">
-          Связать с устройством (UID, опционально)
-        </label>
-        <input
-          id="linked_device_uid"
-          name="linked_device_uid"
-          style={inputStyle}
-          value={values.linked_device_uid}
-          onChange={handleChange}
-          placeholder={
-            values.device_type.includes("ACTUATOR")
-              ? "UID датчика, который управляет этим актуатором"
-              : "UID актуатора, которым управляет этот датчик"
-          }
-        />
-      </div>
-
-      <div style={fieldStyle}>
-        <label style={labelStyle} htmlFor="link_description">
-          Комментарий к связи (опционально)
-        </label>
-        <input
-          id="link_description"
-          name="link_description"
-          style={inputStyle}
-          value={values.link_description}
-          onChange={handleChange}
-          placeholder="например, полив включается при влажности почвы ниже порога"
-        />
-      </div>
-
       <button
         type="submit"
         disabled={submitting}

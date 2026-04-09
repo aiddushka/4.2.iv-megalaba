@@ -540,7 +540,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             style={{
               display: "grid",
               gap: "0.5rem",
-              gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr 0.8fr auto",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr auto",
               marginBottom: "1rem",
             }}
           >
@@ -568,12 +568,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 </option>
               ))}
             </select>
-            <input
-              value={linkController}
-              onChange={(e) => setLinkController(e.target.value)}
-              placeholder="Контроллер (опц.)"
-              style={{ padding: "0.5rem", borderRadius: 8, background: "#0f172a", color: "#e5e7eb", border: "1px solid #1f2937" }}
-            />
             <input
               value={linkDescription}
               onChange={(e) => setLinkDescription(e.target.value)}
@@ -633,7 +627,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   {"[Датчик:"} {link.source_device_uid}{"] связан с [Актуатор:"}  {link.target_device_uid}{"]"}
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                  {[link.controller ? `Контроллер: ${link.controller}` : null, link.description]
+                  {[link.description ? `Описание: ${link.description}` : null]
                     .filter(Boolean)
                     .join(" · ") || "Без дополнительных данных"}
                 </div>
