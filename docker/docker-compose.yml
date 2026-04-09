@@ -62,5 +62,17 @@ services:
       - /app/node_modules
       - ../frontend-device-config:/app
 
+  sensor-emulator-manager:
+    image: python:3.11-slim
+    container_name: greenhouse_sensor_emulator_manager
+    depends_on:
+      - backend
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir requests && python sensor_manager.py"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    volumes:
+      - ../device-emulator:/app
+
 volumes:
   postgres_data:

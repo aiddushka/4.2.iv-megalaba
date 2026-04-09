@@ -33,6 +33,9 @@ export function RegisterDevicePage() {
         });
       }
       setResult(`Устройство зарегистрировано: id=${data.id}, status=${data.status}`);
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка при регистрации устройства");
     }
@@ -52,11 +55,6 @@ export function RegisterDevicePage() {
       <h2 style={{ fontSize: "1.25rem", fontWeight: 600, marginBottom: "1rem" }}>
         Регистрация устройства
       </h2>
-      <p style={{ marginBottom: "1.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
-        Представь, что ты работаешь с «ноутбука/флешки», подключённой к устройству. Здесь ты
-        создаёшь запись об устройстве в системе, чтобы администратор мог потом увидеть его на
-        основном сайте и «установить на доску».
-      </p>
       <DeviceForm onSubmit={handleSubmit} />
       {result && (
         <div

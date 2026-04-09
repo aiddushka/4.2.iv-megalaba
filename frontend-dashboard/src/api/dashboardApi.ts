@@ -9,7 +9,7 @@ export interface SensorState {
   location?: string | null;
   min_value?: number | null;
   max_value?: number | null;
-  indicator?: "green" | "yellow" | "red" | "unknown";
+  indicator?: "white" | "green" | "yellow" | "red";
 }
 
 export interface ActuatorState {

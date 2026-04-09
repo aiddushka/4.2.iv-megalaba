@@ -72,13 +72,18 @@ def update_link(
 ):
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    fields_set = payload.__fields_set__
     link = automation_service.update_device_link(
         db=db,
         link_id=link_id,
-        auto_control_enabled=payload.auto_control_enabled,
-        min_value=payload.min_value,
-        max_value=payload.max_value,
-        description=payload.description,
+        auto_control_enabled=(
+            payload.auto_control_enabled
+            if "auto_control_enabled" in fields_set
+            else automation_service.UNSET
+        ),
+        min_value=payload.min_value if "min_value" in fields_set else automation_service.UNSET,
+        max_value=payload.max_value if "max_value" in fields_set else automation_service.UNSET,
+        description=payload.description if "description" in fields_set else automation_service.UNSET,
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")

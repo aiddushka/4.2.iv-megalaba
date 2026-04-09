@@ -27,23 +27,23 @@ def _device_info(db: Session, device_uid: str) -> dict:
 
 def _sensor_indicator(value: float, min_value: float | None, max_value: float | None) -> str:
     if min_value is None and max_value is None:
-        return "unknown"
+        return "white"
     if min_value is not None and max_value is not None:
-        band = max((max_value - min_value) * 0.1, 1e-6)
         if min_value <= value <= max_value:
             return "green"
-        if (min_value - band) <= value <= (max_value + band):
+        distance = min(abs(value - min_value), abs(value - max_value))
+        if distance <= 1:
             return "yellow"
         return "red"
     if min_value is not None:
         if value >= min_value:
             return "green"
-        if value >= min_value * 0.9:
+        if (min_value - value) <= 1:
             return "yellow"
         return "red"
     if value <= max_value:
         return "green"
-    if value <= max_value * 1.1:
+    if (value - max_value) <= 1:
         return "yellow"
     return "red"
 

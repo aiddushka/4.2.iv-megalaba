@@ -29,6 +29,13 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [linkAutoControlEnabled, setLinkAutoControlEnabled] = useState(false);
   const [linkSaving, setLinkSaving] = useState(false);
 
+  const parseThresholdValue = (raw: string): number | undefined => {
+    const normalized = raw.trim().replace(",", ".");
+    if (!normalized) return undefined;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -51,7 +58,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     load();
     const id = setInterval(() => {
       if (mounted) load();
-    }, 5000);
+    }, 2000);
     return () => {
       mounted = false;
       clearInterval(id);
@@ -93,6 +100,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const actuatorDevicesWithoutData = assignedDevices.filter(
     (d) => d.device_type.includes("ACTUATOR") && !actuatorsWithData.has(d.device_uid),
   );
+  const autoControlledActuatorUids = new Set(
+    (state?.links || [])
+      .filter((link) => link.active && Boolean(link.auto_control_enabled))
+      .map((link) => link.target_device_uid),
+  );
 
   const saveLink = async () => {
     if (!linkSourceUid || !linkTargetUid) return;
@@ -105,8 +117,8 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
         description: linkDescription || undefined,
         active: true,
         auto_control_enabled: linkAutoControlEnabled,
-        min_value: linkMinValue.trim() ? Number(linkMinValue) : undefined,
-        max_value: linkMaxValue.trim() ? Number(linkMaxValue) : undefined,
+        min_value: parseThresholdValue(linkMinValue),
+        max_value: parseThresholdValue(linkMaxValue),
       });
       setLinkDescription("");
       setLinkMinValue("");
@@ -139,15 +151,15 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   };
 
   const handleDelete = async (deviceUid: string) => {
-  if (confirm(`Удалить устройство "${deviceUid}"? Это действие нельзя отменить.`)) {
-    try {
-      await deleteDeviceConfig(deviceUid);
-      await load(); // перезагрузить страницу
-    } catch (error) {
-      setError("Не удалось удалить устройство");
+    if (confirm(`Удалить устройство "${deviceUid}"? Это действие нельзя отменить.`)) {
+      try {
+        await deleteDeviceConfig(deviceUid);
+        await load();
+      } catch (error) {
+        setError("Не удалось удалить устройство");
+      }
     }
-  }
-};
+  };
 
   return (
     <>
@@ -167,136 +179,148 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           {error && <p style={{ color: "#fecaca" }}>{error}</p>}
           {!loading && !error && state && state.sensors.length === 0 && (
             <p style={{ color: "#6b7280", fontSize: "0.9rem" }}>
-              Данных с датчиков пока нет. Запусти эмуляторы в папке `device-emulator/sensors`.
+              Данных с датчиков пока нет. После установки датчика админом эмулятор запускается автоматически.
             </p>
           )}
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              {state?.sensors.map((s) => (
-                <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
-                  <div>
-                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
-                    {(s.description || s.location) && (
-                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                        {[s.description, s.location].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
-                    <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                      {s.sensor_type || "sensor"}: {s.value}
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            {state?.sensors.map((s) => (
+              <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
+                {(() => {
+                  const device = assignedDevices.find((d) => d.device_uid === s.device_uid);
+                  const isActive = device?.status === "active";
+                  return (
+                    <div>
+                      <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
+                      {(s.description || s.location) && (
+                        <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                          {[s.description, s.location].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      {isActive ? (
+                        <>
+                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                            {s.sensor_type || "sensor"}: {s.value}
+                          </div>
+                          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                background:
+                                  s.indicator === "green"
+                                    ? "#22c55e"
+                                    : s.indicator === "yellow"
+                                      ? "#facc15"
+                                      : s.indicator === "red"
+                                        ? "#ef4444"
+                                        : "#ffffff",
+                              }}
+                            />
+                            <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                              Индикатор: {s.indicator || "white"}
+                              {s.min_value != null || s.max_value != null
+                                ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
+                                : ""}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Датчик не активен</div>
+                      )}
                     </div>
-                    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "50%",
-                          display: "inline-block",
-                          background:
-                            s.indicator === "green"
-                              ? "#22c55e"
-                              : s.indicator === "yellow"
-                                ? "#facc15"
-                                : s.indicator === "red"
-                                  ? "#ef4444"
-                                  : "#6b7280",
-                        }}
-                      />
-                      <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                        Индикатор: {s.indicator || "unknown"}
-                        {s.min_value != null || s.max_value != null
-                          ? ` (норма ${s.min_value ?? "-"}..${s.max_value ?? "-"})`
-                          : ""}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                      {new Date(s.created_at).toLocaleTimeString()}
-                    </span>
+                  );
+                })()}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                    {new Date(s.created_at).toLocaleTimeString()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openDetails(s.device_uid)}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Подробнее
+                  </button>
+                  {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => openDetails(s.device_uid)}
+                      onClick={() => handleDelete(s.device_uid)}
                       style={{
                         padding: "0.25rem 0.5rem",
                         fontSize: "0.75rem",
                         borderRadius: 6,
-                        border: "1px solid #374151",
+                        border: "1px solid #7f1d1d",
                         background: "transparent",
-                        color: "#9ca3af",
+                        color: "#fca5a5",
                         cursor: "pointer",
                       }}
                     >
-                      Подробнее
+                      Удалить
                     </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(s.device_uid)}
-                        style={{
-                          padding: "0.25rem 0.5rem",
-                          fontSize: "0.75rem",
-                          borderRadius: 6,
-                          border: "1px solid #7f1d1d",
-                          background: "transparent",
-                          color: "#fca5a5",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    )}
+                  )}
+                </div>
+              </div>
+            ))}
+            {sensorDevicesWithoutData.map((d) => (
+              <div key={d.device_uid} style={cardStyle}>
+                <div>
+                  <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
+                  {(d.description || d.location) && (
+                    <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                      {[d.description, d.location].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                  <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                    {d.device_type}: {d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
                   </div>
                 </div>
-              ))}
-              {sensorDevicesWithoutData.map((d) => (
-                <div key={d.device_uid} style={cardStyle}>
-                  <div>
-                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
-                    {(d.description || d.location) && (
-                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                        {[d.description, d.location].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
-                    <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                      {d.device_type}: ожидание первых данных
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => openDetails(d.device_uid)}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      fontSize: "0.75rem",
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "transparent",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Подробнее
+                  </button>
+                  {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => openDetails(d.device_uid)}
+                      onClick={() => handleDelete(d.device_uid)}
                       style={{
                         padding: "0.25rem 0.5rem",
                         fontSize: "0.75rem",
                         borderRadius: 6,
-                        border: "1px solid #374151",
+                        border: "1px solid #7f1d1d",
                         background: "transparent",
-                        color: "#9ca3af",
+                        color: "#fca5a5",
                         cursor: "pointer",
                       }}
                     >
-                      Подробнее
+                      Удалить
                     </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(d.device_uid)}
-                        style={{
-                          padding: "0.25rem 0.5rem",
-                          fontSize: "0.75rem",
-                          borderRadius: 6,
-                          border: "1px solid #7f1d1d",
-                          background: "transparent",
-                          color: "#fca5a5",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section
@@ -319,93 +343,114 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {state.actuators.map((a) => (
                 <div key={a.device_uid} style={cardStyle}>
-                  <div>
-                    <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{a.device_uid}</div>
-                    {(a.description || a.location) && (
-                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                        {[a.description, a.location].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
-                    <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                      {a.actuator_type}:{" "}
-                      <span
-                        style={{
-                          color: a.state === "ON" ? "#bbf7d0" : "#fca5a5",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {a.state}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {isAdmin && (
+                  {(() => {
+                    const isAutoControlled = autoControlledActuatorUids.has(a.device_uid);
+                    return (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "ON")}
-                          style={{
-                            padding: "0.2rem 0.45rem",
-                            fontSize: "0.72rem",
-                            borderRadius: 6,
-                            border: "1px solid #14532d",
-                            background: "transparent",
-                            color: "#bbf7d0",
-                            cursor: "pointer",
-                          }}
-                        >
-                          ON
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "OFF")}
-                          style={{
-                            padding: "0.2rem 0.45rem",
-                            fontSize: "0.72rem",
-                            borderRadius: 6,
-                            border: "1px solid #7f1d1d",
-                            background: "transparent",
-                            color: "#fecaca",
-                            cursor: "pointer",
-                          }}
-                        >
-                          OFF
-                        </button>
+                        <div>
+                          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{a.device_uid}</div>
+                          {(a.description || a.location) && (
+                            <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
+                              {[a.description, a.location].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                            {a.actuator_type}:{" "}
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                marginRight: 6,
+                                background: a.state === "ON" ? "#22c55e" : "#ffffff",
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: a.state === "ON" ? "#bbf7d0" : "#ffffff",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {a.state}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={isAutoControlled}
+                                onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "ON")}
+                                style={{
+                                  padding: "0.2rem 0.45rem",
+                                  fontSize: "0.72rem",
+                                  borderRadius: 6,
+                                  border: "1px solid #14532d",
+                                  background: "transparent",
+                                  color: isAutoControlled ? "#6b7280" : "#bbf7d0",
+                                  cursor: isAutoControlled ? "not-allowed" : "pointer",
+                                  opacity: isAutoControlled ? 0.55 : 1,
+                                }}
+                              >
+                                ON
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isAutoControlled}
+                                onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "OFF")}
+                                style={{
+                                  padding: "0.2rem 0.45rem",
+                                  fontSize: "0.72rem",
+                                  borderRadius: 6,
+                                  border: "1px solid #7f1d1d",
+                                  background: "transparent",
+                                  color: isAutoControlled ? "#6b7280" : "#fecaca",
+                                  cursor: isAutoControlled ? "not-allowed" : "pointer",
+                                  opacity: isAutoControlled ? 0.55 : 1,
+                                }}
+                              >
+                                OFF
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openDetails(a.device_uid)}
+                            style={{
+                              padding: "0.25rem 0.5rem",
+                              fontSize: "0.75rem",
+                              borderRadius: 6,
+                              border: "1px solid #374151",
+                              background: "transparent",
+                              color: "#9ca3af",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Подробнее
+                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(a.device_uid)}
+                              style={{
+                                padding: "0.25rem 0.5rem",
+                                fontSize: "0.75rem",
+                                borderRadius: 6,
+                                border: "1px solid #7f1d1d",
+                                background: "transparent",
+                                color: "#fca5a5",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Удалить
+                            </button>
+                          )}
+                        </div>
                       </>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openDetails(a.device_uid)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        background: "transparent",
-                        color: "#9ca3af",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Подробнее
-                    </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(a.device_uid)}
-                        style={{
-                          padding: "0.25rem 0.5rem",
-                          fontSize: "0.75rem",
-                          borderRadius: 6,
-                          border: "1px solid #7f1d1d",
-                          background: "transparent",
-                          color: "#fca5a5",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               ))}
               {actuatorDevicesWithoutData.map((d) => (
@@ -571,8 +616,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             <div key={link.id} style={cardStyle}>
               <div>
                 <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                  {link.source_device_uid} {"->"}{" "}
-                  {link.target_device_uid}
+                  {link.source_device_uid} {"->"} {link.target_device_uid}
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
                   {[link.controller ? `Контроллер: ${link.controller}` : null, link.description]
@@ -592,13 +636,13 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       padding: "0.25rem 0.5rem",
                       fontSize: "0.75rem",
                       borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "transparent",
-                      color: "#9ca3af",
+                      border: link.auto_control_enabled ? "1px solid #14532d" : "1px solid #374151",
+                      background: link.auto_control_enabled ? "rgba(34,197,94,0.15)" : "transparent",
+                      color: link.auto_control_enabled ? "#bbf7d0" : "#9ca3af",
                       cursor: "pointer",
                     }}
                   >
-                    Авто {link.auto_control_enabled ? "OFF" : "ON"}
+                    Auto {link.auto_control_enabled ? "ON" : "OFF"}
                   </button>
                   <button
                     type="button"
@@ -717,4 +761,3 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     </>
   );
 }
-
