@@ -4,6 +4,8 @@ from app.models.device_link import DeviceLink
 from app.models.automation_rule import AutomationRule
 from app.models.sensor_data import SensorData
 
+UNSET = object()
+
 
 def create_rule(
     db: Session,
@@ -88,19 +90,21 @@ def delete_device_link(db: Session, link_id: int) -> bool:
 def update_device_link(
     db: Session,
     link_id: int,
-    auto_control_enabled: bool | None = None,
-    min_value: float | None = None,
-    max_value: float | None = None,
-    description: str | None = None,
+    auto_control_enabled: bool | None | object = UNSET,
+    min_value: float | None | object = UNSET,
+    max_value: float | None | object = UNSET,
+    description: str | None | object = UNSET,
 ) -> DeviceLink | None:
     link = db.query(DeviceLink).filter(DeviceLink.id == link_id).first()
     if not link:
         return None
-    if auto_control_enabled is not None:
+    if auto_control_enabled is not UNSET:
         link.auto_control_enabled = auto_control_enabled
-    link.min_value = min_value
-    link.max_value = max_value
-    if description is not None:
+    if min_value is not UNSET:
+        link.min_value = min_value
+    if max_value is not UNSET:
+        link.max_value = max_value
+    if description is not UNSET:
         link.description = description
     db.commit()
     db.refresh(link)

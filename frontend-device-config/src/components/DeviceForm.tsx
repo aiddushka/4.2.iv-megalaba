@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
 export interface DeviceFormValues {
   device_uid: string;
@@ -33,7 +33,6 @@ export function DeviceForm({ onSubmit }: Props) {
     link_description: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [descriptionEdited, setDescriptionEdited] = useState(false);
 
   const getDeviceTypeLabel = (type: string) => {
     switch (type) {
@@ -48,7 +47,7 @@ export function DeviceForm({ onSubmit }: Props) {
       case "IRRIGATION_ACTUATOR":
         return "Актуатор полива";
       case "HEATER_ACTUATOR":
-        return "Актуатор обогрева";
+        return "Актуатор температуры";
       case "VENTILATION_ACTUATOR":
         return "Актуатор вентиляции";
       case "LIGHT_ACTUATOR":
@@ -77,27 +76,10 @@ export function DeviceForm({ onSubmit }: Props) {
   };
   const generatedDescription = buildDescriptionText(values);
 
-  useEffect(() => {
-    if (!descriptionEdited) {
-      setValues((prev) => ({ ...prev, description: buildDescriptionText(prev) }));
-    }
-  }, [
-    descriptionEdited,
-    values.bus,
-    values.bus_address,
-    values.components,
-    values.controller,
-    values.device_type,
-    values.pin,
-  ]);
-
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-    if (name === "description") {
-      setDescriptionEdited(true);
-    }
     if (name === "pin") {
       setValues((prev) => ({ ...prev, pin: value === "" ? "" : Number(value) }));
       return;
@@ -120,7 +102,10 @@ export function DeviceForm({ onSubmit }: Props) {
     if (values.pin === "") return;
     setSubmitting(true);
     try {
-      await onSubmit(values);
+      await onSubmit({
+        ...values,
+        description: values.description.trim() || generatedDescription,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -163,7 +148,7 @@ export function DeviceForm({ onSubmit }: Props) {
     <form onSubmit={handleSubmit}>
       <div style={fieldStyle}>
         <label style={labelStyle} htmlFor="device_uid">
-          UID устройства
+          *UID устройства (поле обязательно для заполнения)
         </label>
         <input
           id="device_uid"
@@ -192,7 +177,7 @@ export function DeviceForm({ onSubmit }: Props) {
           <option value="HUMIDITY_SOIL_SENSOR">Датчик влажности почвы</option>
           <option value="LIGHT_SENSOR">Датчик освещённости</option>
           <option value="IRRIGATION_ACTUATOR">Актуатор полива</option>
-          <option value="HEATER_ACTUATOR">Актуатор обогрева</option>
+          <option value="HEATER_ACTUATOR">Актуатор температуры</option>
           <option value="VENTILATION_ACTUATOR">Актуатор вентиляции</option>
           <option value="LIGHT_ACTUATOR">Актуатор освещения</option>
         </select>
@@ -234,7 +219,7 @@ export function DeviceForm({ onSubmit }: Props) {
 
       <div style={fieldStyle}>
         <label style={labelStyle} htmlFor="pin">
-          Pin GPIO
+          *Pin GPIO (поле обязательно для заполнения)
         </label>
         <input
           id="pin"
@@ -312,13 +297,12 @@ export function DeviceForm({ onSubmit }: Props) {
           onChange={handleChange}
           placeholder={generatedDescription}
           rows={6}
-          required
         />
       </div>
 
       <div style={fieldStyle}>
         <label style={labelStyle} htmlFor="location_hint">
-          Планируемое место установки
+          *Планируемое место установки (поле обязательно для заполнения)
         </label>
         <input
           id="location_hint"

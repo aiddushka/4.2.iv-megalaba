@@ -92,7 +92,7 @@ export function DeviceForm({ onSubmit }: Props) {
           <option value="HUMIDITY_SOIL_SENSOR">Датчик влажности почвы</option>
           <option value="LIGHT_SENSOR">Датчик освещённости</option>
           <option value="IRRIGATION_ACTUATOR">Актуатор полива</option>
-          <option value="HEATER_ACTUATOR">Актуатор обогрева</option>
+          <option value="HEATER_ACTUATOR">Актуатор температуры</option>
           <option value="VENTILATION_ACTUATOR">Актуатор вентиляции</option>
           <option value="LIGHT_ACTUATOR">Актуатор освещения</option>
         </select>

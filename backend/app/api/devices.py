@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.database.session import SessionLocal
+from app.models.device import Device
 from app.models.user import User
 from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
 from app.services import device_service
@@ -55,6 +56,36 @@ def get_assigned_devices(
     current_user: User = Depends(get_current_user),
 ):
     return device_service.get_assigned_devices(db)
+
+
+@router.get("/status/{device_uid}")
+def get_device_status_public(
+    device_uid: str,
+    db: Session = Depends(get_db),
+):
+    """Публичный статус устройства для эмуляторов/устройств без авторизации."""
+    device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {
+        "device_uid": device.device_uid,
+        "device_type": device.device_type,
+        "status": device.status,
+    }
+
+
+@router.get("/active-sensors")
+def get_active_sensors_public(db: Session = Depends(get_db)):
+    """Публичный список активных датчиков для менеджера эмуляторов."""
+    devices = (
+        db.query(Device)
+        .filter(Device.status == "active", Device.device_type.like("%SENSOR%"))
+        .all()
+    )
+    return [
+        {"device_uid": d.device_uid, "device_type": d.device_type, "status": d.status}
+        for d in devices
+    ]
 
 
 @router.get("/{device_uid}", response_model=DeviceOut)
