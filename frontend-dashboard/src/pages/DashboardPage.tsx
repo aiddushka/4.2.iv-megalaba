@@ -175,7 +175,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>
             Датчики
           </h2>
-          {loading && <p style={{ color: "#9ca3af" }}>Загружаем данные...</p>}
+          {loading}
           {error && <p style={{ color: "#fecaca" }}>{error}</p>}
           {!loading && !error && state && state.sensors.length === 0 && (
             <p style={{ color: "#6b7280", fontSize: "0.9rem" }}>
@@ -191,11 +191,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   return (
                     <div>
                       <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{s.device_uid}</div>
-                      {(s.description || s.location) && (
-                        <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                          {[s.description, s.location].filter(Boolean).join(" · ")}
-                        </div>
-                      )}
                       {isActive ? (
                         <>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -275,11 +270,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               <div key={d.device_uid} style={cardStyle}>
                 <div>
                   <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
-                  {(d.description || d.location) && (
-                    <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                      {[d.description, d.location].filter(Boolean).join(" · ")}
-                    </div>
-                  )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                     {d.device_type}: {d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
                   </div>
@@ -349,11 +339,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       <>
                         <div>
                           <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{a.device_uid}</div>
-                          {(a.description || a.location) && (
-                            <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                              {[a.description, a.location].filter(Boolean).join(" · ")}
-                            </div>
-                          )}
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                             {a.actuator_type}:{" "}
                             <span
@@ -457,11 +442,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 <div key={d.device_uid} style={cardStyle}>
                   <div>
                     <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{d.device_uid}</div>
-                    {(d.description || d.location) && (
-                      <div style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 2 }}>
-                        {[d.description, d.location].filter(Boolean).join(" · ")}
-                      </div>
-                    )}
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                       {d.device_type}: состояние ещё не получено
                     </div>
@@ -761,3 +741,4 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     </>
   );
 }
+
