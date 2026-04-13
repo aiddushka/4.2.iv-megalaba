@@ -1,148 +1,215 @@
 # IoT Greenhouse MegaLab
 
-# ТЗ 
-«Умная теплица»
-Компоненты системы
-Личный кабинет (Регистрация ЛК, Регистрация устройств, настройка, управление)
-Датчики: освещенность, влажность, температура
-Актуаторы: полив, подогрев, проветривание, освещение
-Автоматизация: поддержка скриптов
-Связь: wi-fi, gsm, ethernet, zigbee 
+Лабораторный проект «**Умная теплица**» (IoT): backend + БД + два фронтенда + эмуляторы устройств.
 
-## Описание проекта
+## Что внутри
 
-Проект "IoT Greenhouse" — лабораторная работа по предмету **Интернет вещей** (4 курс, 2 семестр). Цель проекта — создать систему умной теплицы с поддержкой:
+- **Backend**: Python, FastAPI, SQLAlchemy, JWT auth
+- **БД**: PostgreSQL
+- **Frontend**:
+  - **Dashboard** (порт **3000**) — просмотр и управление (для админа)
+  - **Device Configurator** (порт **3001**) — регистрация/первичная конфигурация устройств (без авторизации)
+- **Эмуляторы**:
+  - менеджер сенсоров в Docker — сам запускает сенсорные скрипты для активных датчиков
+  - актуаторы — отдельные скрипты для ручного запуска
 
-- Подключения датчиков и актуаторов
-- Отправки и получения данных через API
-- Автоматизации управления теплицей
-- Визуализации состояния в Dashboard
-- Эмуляции виртуальных устройств
+## Ссылки на документацию
 
-Проект состоит из Backend, Frontend и эмуляторов устройств.
+- `docs/api-docs.md` — эндпоинты и примеры запросов
+- `docs/architecture.md` — архитектура и поток данных
+- `docs/sites.md` — страницы/модули фронтенда
 
----
+## Быстрый старт (Docker)
 
-## Стек технологий
+### Требования
 
-- Backend: Python + FastAPI
-- База данных: PostgreSQL
-- ORM: SQLAlchemy
-- Миграции: Alembic
-- Контейнеризация: Docker + Docker Compose
-- Frontend: React (Dashboard и конфигуратор)
-- Эмуляторы устройств: Python scripts
+- установлен **Docker Desktop**
+- Docker Desktop в состоянии Running
 
----
+### Запуск
 
-## Быстрый старт
-
-### 1. Установка
-
-1. Склонируйте репозиторий.
-2. Установите и запустите Docker Desktop.
-3. Перейдите в папку `docker`.
-4. Соберите и запустите контейнеры:
+Из корня репозитория:
 
 ```bash
+cd docker
 docker compose up --build
 ```
 
-Контейнеры, которые будут запущены:
-- `backend` — сервер FastAPI
-- `postgres` — база данных PostgreSQL
+Поднимутся контейнеры:
 
-### 2. Проверка API
+- `greenhouse_postgres` — PostgreSQL (порт **5432**)
+- `greenhouse_backend` — FastAPI (порт **8000**)
+- `greenhouse_frontend_dashboard` — Vite dev server (наружу **3000**)
+- `greenhouse_frontend_device_config` — Vite dev server (наружу **3001**)
+- `greenhouse_sensor_emulator_manager` — менеджер сенсоров (без порта)
 
-Откройте в браузере:
+### Проверка
+
+- **API health**: `http://localhost:8000/` → `{"message":"IoT Greenhouse API running"}`
+- **Swagger**: `http://localhost:8000/docs`
+- **Dashboard**: `http://localhost:3000`
+- **Device Configurator**: `http://localhost:3001`
+
+### Учётные записи
+
+- **Админ по умолчанию**: `admin / 123` (создаётся автоматически при старте backend, если нет пользователя `admin`)
+
+## Как “живет” система (коротко)
+
+1) На `http://localhost:3001` регистрируем устройства (`POST /devices/register`). Устройство попадает в статус `unassigned`.
+2) На Dashboard (админ) “устанавливаем” устройство (`POST /devices/assign`) → статус становится `active`.
+3) Менеджер сенсоров в Docker опрашивает `GET /devices/active-sensors` и запускает скрипты сенсоров для активных устройств.
+4) Сенсоры отправляют телеметрию в `POST /sensor-data/`.
+5) Dashboard показывает агрегированное состояние через `GET /dashboard/state`. Админ может вручную управлять актуаторами `POST /actuators/control`, а также создавать “связи” датчик → актуатор (`/automation/links`).
+
+## Дерево проекта (актуальное)
+
+Ниже дерево репозитория (как в `tree /a /f`).
+
 ```
-http://localhost:8000
+4.2.iv-megalaba
+|   .gitignore
+|   README.md
+|
++---backend
+|   |   main.py
+|   |   requirements.txt
+|   |
+|   +---app
+|   |   |   main.py
+|   |   |   __init__.py
+|   |   |
+|   |   +---api
+|   |   |       actuators.py
+|   |   |       auth.py
+|   |   |       automation.py
+|   |   |       dashboard.py
+|   |   |       devices.py
+|   |   |       sensors.py
+|   |   |
+|   |   +---database
+|   |   |       base.py
+|   |   |       session.py
+|   |   |
+|   |   +---models
+|   |   |       actuator.py
+|   |   |       automation_rule.py
+|   |   |       device.py
+|   |   |       device_link.py
+|   |   |       sensor_data.py
+|   |   |       user.py
+|   |   |
+|   |   +---schemas
+|   |   |       actuator_schema.py
+|   |   |       auth_schema.py
+|   |   |       automation_schema.py
+|   |   |       device_schema.py
+|   |   |       sensor_schema.py
+|   |   |
+|   |   \---services
+|   |           actuator_service.py
+|   |           auth_service.py
+|   |           automation_service.py
+|   |           device_service.py
+|   |           sensor_service.py
+|   |
+|   \---images
+|       \---ArduinoUnoComponents
+|               AUno_��������_����������.png
+|               AUno_��������_�����_�_�������.png
+|               AUno_���������_���������.png
+|               AUno_������_���������_�����.png
+|               AUno_������_������������.png
+|               AUno_������_�����������.png
+|               AUno_���������������_�������.png
+|
++---database
+|       init.sql
+|
++---device-emulator
+|   |   sensor_manager.py
+|   |
+|   +---actuators
+|   |       heater.py
+|   |       irrigation.py
+|   |       light.py
+|   |       ventilation.py
+|   |
+|   \---sensors
+|           humidity_air_sensor.py
+|           humidity_soil_sensor.py
+|           light_sensor.py
+|           temperature_sensor.py
+|
++---docker
+|   |   backend.Dockerfile
+|   |   docker-compose.yml
+|   |   frontend-dashboard.Dockerfile
+|   |   frontend-device-config.Dockerfile
+|   |
+|   \---database
+|
++---docs
+|       api-docs.md
+|       architecture.md
+|       sites.md
+|
++---frontend-dashboard
+|   |   index.html
+|   |   package.json
+|   |   tsconfig.json
+|   |   vite.config.ts
+|   |
+|   \---src
+|       |   App.tsx
+|       |   main.tsx
+|       |
+|       +---api
+|       |       actuatorsApi.ts
+|       |       apiClient.ts
+|       |       authApi.ts
+|       |       automationApi.ts
+|       |       dashboardApi.ts
+|       |       devicesApi.ts
+|       |       workersApi.ts
+|       |
+|       +---components
+|       |       DeviceHistoryBlock.tsx
+|       |       DeviceInfoBlock.tsx
+|       |       DeviceManagementBlock.tsx
+|       |
+|       \---pages
+|               DashboardPage.tsx
+|               LoginPage.tsx
+|               RegisterPage.tsx
+|               UnassignedDevicesPage.tsx
+|               WorkersPage.tsx
+|
+\---frontend-device-config
+    |   index.html
+    |   package.json
+    |   tsconfig.json
+    |   vite.config.ts
+    |
+    \---src
+        |   App.tsx
+        |   main.tsx
+        |
+        +---api
+        |       apiClient.ts
+        |       automationApi.ts
+        |       devicesApi.ts
+        |
+        +---components
+        |       DeviceForm.tsx
+        |
+        \---pages
+                RegisterDevicePage.tsx
 ```
-Ожидаемый ответ:
-```json
-{"message": "IoT Greenhouse API running"}
-```
 
-Документация Swagger для API:
-```
-http://localhost:8000/docs
-```
+## Примечания по backend entrypoint’ам
 
----
+В репозитории есть два файла `main.py`:
 
-## Структура проекта
-
-```
-4.2.iv-megalaba/
-│
-├─ backend/             # Python сервер
-│   ├─ app/
-│   │   ├─ api/         # Endpoints API: devices.py, sensors.py, actuators.py, auth.py
-│   │   ├─ models/      # Модели базы данных: device.py, sensor_data.py, user.py
-│   │   ├─ schemas/     # Pydantic схемы: device_schema.py, sensor_schema.py
-│   │   ├─ services/    # Бизнес-логика: device_service.py, sensor_service.py, automation_service.py
-│   │   └─ database/    # Подключение к БД: session.py, base.py
-│   ├─ main.py          # Точка входа FastAPI
-│   └─ requirements.txt # Python зависимости
-│
-├─ device-emulator/    # Эмуляторы устройств
-│   ├─ sensors/         # Датчики: temperature, humidity, light
-│   └─ actuators/       # Актуаторы: irrigation, heater, ventilation
-│
-├─ frontend-dashboard/      # Основной сайт (Dashboard)
-│   └─ показывает текущие показатели и состояние устройств
-│
-├─ frontend-device-config/  # Конфигуратор устройств (Сайт №2)
-│   └─ регистрация и настройка устройств
-│
-├─ database/           # SQL скрипты для инициализации БД
-│   └─ init.sql
-│
-├─ docker/             # Docker файлы
-├─ docs/               # Документация
-├─ tests/              # Тесты
-├─ docker-compose.yml  # Поднятие контейнеров
-├─ README.md           # Инструкция
-└─ .gitignore          # Исключения Git
-```
-
----
-
-## Как работать с проектом
-
-### Backend
-- Реализован на FastAPI.
-- Таблицы: `devices`, `sensor_data`.
-- Эндпоинты:
-  - `POST /devices/` — регистрация нового устройства
-  - `GET /devices/` — получить список всех устройств
-  - `POST /sensor-data/` — отправка данных с датчика
-  - `GET /sensor-data/` — получение всех данных датчиков
-  - `POST /actuators/control/` — управление актуаторами
-  - `GET /actuators/status/` — получение текущего состояния актуаторов
-
-### Эмуляторы устройств
-- Скрипты в `device-emulator/` генерируют данные датчиков и управляют актуаторами.
-- Каждый эмулятор может быть запущен локально и отправлять данные на Backend через API.
-
-### Frontend
-1. **Dashboard** (`frontend-dashboard`) — отображение температуры, влажности, освещенности и состояния всех устройств. Возможность управления актуаторами.
-2. **Device Configurator** (`frontend-device-config`) — регистрация и первичная настройка устройств перед подключением к Dashboard.
-
-### База данных
-- Инициализация через `database/init.sql`.
-- Таблицы создаются автоматически при старте FastAPI с SQLAlchemy.
-
----
-
-## Рекомендации для команды
-
-- **Backend**: работа с API, сервисами и моделями SQLAlchemy.
-- **Frontend**: отображение данных Dashboard, управление актуаторами, UX.
-- **Эмуляторы**: генерация тестовых данных и проверка работы API.
-- **Документация**: поддерживать `docs/` с архитектурой и схемами данных.
-
----
-
-Теперь у проекта есть полностью рабочая структура и инструкция для быстрого старта. Все, что нужно, чтобы запустить, тестировать и развивать систему, описано в этом README.
+- `backend/main.py` — **используется Docker’ом** (`uvicorn main:app`)
 

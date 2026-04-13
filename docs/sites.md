@@ -19,9 +19,11 @@
 - **API**
   - `src/api/apiClient.ts` — общий клиент для запросов к backend (JWT, обработка 401).
   - `src/api/authApi.ts` — логин/регистрация/`me`.
-  - `src/api/devicesApi.ts` — устройства (assigned/unassigned, assign, update, fetch by uid).
+  - `src/api/devicesApi.ts` — устройства (assigned/unassigned, assign, update, fetch by uid, delete).
   - `src/api/dashboardApi.ts` — агрегированное состояние `/dashboard/state`.
   - `src/api/automationApi.ts` — связи устройств (`/automation/links`).
+  - `src/api/actuatorsApi.ts` — ручное управление актуаторами (`/actuators/control`).
+  - `src/api/workersApi.ts` — управление правами работников (`/auth/workers*`).
 - **Страницы**
   - `src/pages/DashboardPage.tsx` — главная «доска»: датчики/актуаторы, «ожидание данных» для устройств без телеметрии, модальное окно «Подробнее», секция связей датчик → актуатор.
   - `src/pages/UnassignedDevicesPage.tsx` — «неустановленные» устройства (только для админа): установка на локацию.
@@ -123,6 +125,11 @@
 ```bash
 docker compose up --build
 ```
+
+Порты:
+- backend: **8000**
+- dashboard: **3000**
+- device-config: **3001**
 
 ### Остановка и удаление контейнеров/томов
 
