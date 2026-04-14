@@ -48,7 +48,7 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
       <h4 style={{ margin: "0 0 0.75rem 0", color: "#22c55e" }}>Управление устройством</h4>
       <div style={{ marginBottom: 8 }}>
         <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 4 }}>
-          Состояние
+          Статус
         </label>
         <select
           value={status}

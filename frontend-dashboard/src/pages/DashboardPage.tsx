@@ -100,6 +100,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const actuatorDevicesWithoutData = assignedDevices.filter(
     (d) => d.device_type.includes("ACTUATOR") && !actuatorsWithData.has(d.device_uid),
   );
+  const linkedActuatorUids = new Set(
+    (state?.links || []).filter((l) => l.active).map((l) => l.target_device_uid),
+  );
   const autoControlledActuatorUids = new Set(
     (state?.links || [])
       .filter((link) => link.active && Boolean(link.auto_control_enabled))
@@ -249,7 +252,12 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                           </div>
                         </>
                       ) : (
-                        <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Датчик не активен</div>
+                        <>
+                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                            {"Тип датчика:"} {device?.device_type || s.sensor_type || "sensor"}
+                          </div>
+                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Датчик не активен</div>
+                        </>
                       )}
                     </div>
                   );
@@ -364,43 +372,76 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               {state.actuators.map((a) => (
                 <div key={a.device_uid} style={cardStyle}>
                   {(() => {
+                    const device = assignedDevices.find((d) => d.device_uid === a.device_uid);
+                    const isActive = device?.status === "active";
                     const isAutoControlled = autoControlledActuatorUids.has(a.device_uid);
+                    const isLinked = linkedActuatorUids.has(a.device_uid);
+                    const normalizedState = (a.state ?? "").trim().toUpperCase();
+                    const showLinkedState = isLinked && (normalizedState === "ON" || normalizedState === "OFF");
+                    const isManualControlDisabled = isAutoControlled || !isLinked;
+                    const statusLabel = !isLinked
+                      ? "не связан"
+                      : showLinkedState
+                        ? normalizedState
+                        : "состояние ещё не получено";
+                    const statusDotColor = !isLinked
+                      ? "#ffffff"
+                      : normalizedState === "ON"
+                        ? "#22c55e"
+                        : normalizedState === "OFF"
+                          ? "#ef4444"
+                          : "#ffffff";
+                    const statusTextColor = !isLinked
+                      ? "#ffffff"
+                      : normalizedState === "ON"
+                        ? "#bbf7d0"
+                        : normalizedState === "OFF"
+                          ? "#fecaca"
+                          : "#ffffff";
                     return (
                       <>
                         <div>
                           <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID актуатора: "}{a.device_uid}</div>
-                          <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                            {"Тип устройства: "}{a.actuator_type}:{" "}
-                            <div>
-                              <span style = {{fontSize: "0.95rem", fontWeight: 500}}> {"Статус: "}</span>
-                              <span
-                                style={{
-                                  color: a.state === "ON " ? "#bbf7d0" : "#ffffff",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {a.state}
-                              </span><span>{"  "}</span>
-                              <span
-                                style={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: "50%",
-                                  display: "inline-block",
-                                  marginRight: 6,
-                                  background: a.state === "ON" ? "#22c55e" : "#ffffff",
-                                }}
-                              />
+                          {isActive ? (
+                            <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                              {"Тип устройства: "}{a.actuator_type}
+                              <div>
+                                <span style = {{fontSize: "0.95rem", fontWeight: 500}}> {"Состояние: "}</span>
+                                <span
+                                  style={{
+                                    color: statusTextColor,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {statusLabel}
+                                </span><span>{"  "}</span>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                    marginRight: 6,
+                                    background: statusDotColor,
+                                  }}
+                                />
+                              </div>
                             </div>
-
-                          </div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                                {"Тип устройства: "}{device?.device_type || a.actuator_type}
+                              </div>
+                              <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Актуатор не активен</div>
+                            </>
+                          )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           {isAdmin && (
                             <>
                               <button
                                 type="button"
-                                disabled={isAutoControlled}
+                                disabled={isManualControlDisabled}
                                 onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "ON")}
                                 style={{
                                   padding: "0.2rem 0.45rem",
@@ -408,16 +449,16 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                                   borderRadius: 6,
                                   border: "1px solid #14532d",
                                   background: "transparent",
-                                  color: isAutoControlled ? "#6b7280" : "#bbf7d0",
-                                  cursor: isAutoControlled ? "not-allowed" : "pointer",
-                                  opacity: isAutoControlled ? 0.55 : 1,
+                                  color: isManualControlDisabled ? "#6b7280" : "#bbf7d0",
+                                  cursor: isManualControlDisabled ? "not-allowed" : "pointer",
+                                  opacity: isManualControlDisabled ? 0.55 : 1,
                                 }}
                               >
                                 ON
                               </button>
                               <button
                                 type="button"
-                                disabled={isAutoControlled}
+                                disabled={isManualControlDisabled}
                                 onClick={() => handleManualActuator(a.device_uid, a.actuator_type, "OFF")}
                                 style={{
                                   padding: "0.2rem 0.45rem",
@@ -425,9 +466,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                                   borderRadius: 6,
                                   border: "1px solid #7f1d1d",
                                   background: "transparent",
-                                  color: isAutoControlled ? "#6b7280" : "#fecaca",
-                                  cursor: isAutoControlled ? "not-allowed" : "pointer",
-                                  opacity: isAutoControlled ? 0.55 : 1,
+                                  color: isManualControlDisabled ? "#6b7280" : "#fecaca",
+                                  cursor: isManualControlDisabled ? "not-allowed" : "pointer",
+                                  opacity: isManualControlDisabled ? 0.55 : 1,
                                 }}
                               >
                                 OFF
@@ -477,7 +518,30 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   <div>
                     <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID актуатора:"} {d.device_uid}</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                      {"Тип устройства"}{d.device_type}: состояние ещё не получено
+                      {"Тип устройства: "}{d.device_type}
+                      {d.status === "active" ? (
+                        <div style={{ marginTop: 4 }}>
+                          <span style={{ fontSize: "0.95rem", fontWeight: 500 }}>{"Состояние: "}</span>
+                          <span style={{ fontWeight: 600 }}>
+                            {linkedActuatorUids.has(d.device_uid) ? "состояние ещё не получено" : "не связан"}
+                          </span>
+                          <span>{"  "}</span>
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              display: "inline-block",
+                              marginRight: 6,
+                              background: "#ffffff",
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 4, fontSize: "0.95rem", fontWeight: 500 }}>
+                          Актуатор не активен
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
