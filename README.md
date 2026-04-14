@@ -6,6 +6,7 @@
 
 - **Backend**: Python, FastAPI, SQLAlchemy, JWT auth
 - **БД**: PostgreSQL
+- **MQTT**: Eclipse Mosquitto (брокер телеметрии)
 - **Frontend**:
   - **Dashboard** (порт **3000**) — просмотр и управление (для админа)
   - **Device Configurator** (порт **3001**) — регистрация/первичная конфигурация устройств (без авторизации)
@@ -38,6 +39,7 @@ docker compose up --build
 Поднимутся контейнеры:
 
 - `greenhouse_postgres` — PostgreSQL (порт **5432**)
+- `greenhouse_mqtt_broker` — MQTT broker (порт **1883**)
 - `greenhouse_backend` — FastAPI (порт **8000**)
 - `greenhouse_frontend_dashboard` — Vite dev server (наружу **3000**)
 - `greenhouse_frontend_device_config` — Vite dev server (наружу **3001**)
@@ -59,7 +61,7 @@ docker compose up --build
 1) На `http://localhost:3001` регистрируем устройства (`POST /devices/register`). Устройство попадает в статус `unassigned`.
 2) На Dashboard (админ) “устанавливаем” устройство (`POST /devices/assign`) → статус становится `active`.
 3) Менеджер сенсоров в Docker опрашивает `GET /devices/active-sensors` и запускает скрипты сенсоров для активных устройств.
-4) Сенсоры отправляют телеметрию в `POST /sensor-data/`.
+4) Сенсоры публикуют телеметрию в MQTT-топики `greenhouse/sensors/<device_uid>/data`, backend подписывается и сохраняет данные (HTTP `POST /sensor-data/` также остаётся доступным).
 5) Dashboard показывает агрегированное состояние через `GET /dashboard/state`. Админ может вручную управлять актуаторами `POST /actuators/control`, а также создавать “связи” датчик → актуатор (`/automation/links`).
 
 ## Дерево проекта (актуальное)

@@ -6,6 +6,7 @@ from pathlib import Path
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
+from app.services import mqtt_service
 
 
 def create_app() -> FastAPI:
@@ -56,6 +57,14 @@ def create_app() -> FastAPI:
     @app.get("/")
     def root():
         return {"message": "IoT Greenhouse API running"}
+
+    @app.on_event("startup")
+    def startup_mqtt_listener():
+        mqtt_service.start_mqtt_listener()
+
+    @app.on_event("shutdown")
+    def shutdown_mqtt_listener():
+        mqtt_service.stop_mqtt_listener()
 
     return app
 
