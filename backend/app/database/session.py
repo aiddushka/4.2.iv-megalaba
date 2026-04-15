@@ -24,7 +24,9 @@ DB_NAME = os.getenv("POSTGRES_DB", "greenhouse")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-engine = create_engine(DATABASE_URL, echo=True)
+SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() == "true"
+
+engine = create_engine(DATABASE_URL, echo=SQL_ECHO)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -5,10 +5,9 @@ from app.api.auth import get_current_user
 from app.database.session import SessionLocal
 from app.models.device import Device
 from app.models.user import User
-from app.models.device import Device        
-from app.models.device_link import DeviceLink 
+from app.models.device_link import DeviceLink
 from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
-from app.services import device_service
+from app.services import device_service, mqtt_service
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -89,6 +88,29 @@ def get_active_sensors_public(db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/heartbeats")
+def get_device_heartbeats():
+    return mqtt_service.get_all_heartbeats()
+
+
+@router.get("/orchestration-state")
+def get_orchestration_state(db: Session = Depends(get_db)):
+    """
+    Публичный endpoint для менеджера контейнеров.
+    Возвращает желаемое состояние жизненного цикла для каждого устройства.
+    """
+    devices = device_service.get_all_devices(db)
+    return [
+        {
+            "device_uid": d.device_uid,
+            "device_type": d.device_type,
+            "status": d.status,
+            "desired_runtime_state": "running" if d.status == "active" else "stopped",
+        }
+        for d in devices
+    ]
+
+
 @router.get("/{device_uid}", response_model=DeviceOut)
 def get_device(
     device_uid: str,
@@ -121,33 +143,36 @@ def assign_device(
 async def delete_device(
     device_uid: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Только администратор может удалять устройства")
-    
+
     device = db.query(Device).filter(Device.device_uid == device_uid).first()
     if not device:
         raise HTTPException(status_code=404, detail="Устройство не найдено")
-    
+
     # Удалить из actuator (если есть)
     from app.models.actuator import Actuator
+
     db.query(Actuator).filter(Actuator.device_uid == device_uid).delete()
-    
+
     # Удалить из sensor_data (если есть)
     from app.models.sensor_data import SensorData
+
     db.query(SensorData).filter(SensorData.device_uid == device_uid).delete()
-    
+
     # Удалить связанные device_links
     db.query(DeviceLink).filter(
-        (DeviceLink.source_device_uid == device_uid) | 
+        (DeviceLink.source_device_uid == device_uid)
+        |
         (DeviceLink.target_device_uid == device_uid)
     ).delete()
-    
+
     # Удалить устройство
     db.delete(device)
     db.commit()
-    
+
     return {"ok": True, "message": f"Устройство {device_uid} удалено"}
 
 

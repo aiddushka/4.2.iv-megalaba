@@ -45,17 +45,22 @@ def list_rules(db: Session = Depends(get_db)):
 
 @router.post("/links", response_model=DeviceLinkOut)
 def create_link(payload: DeviceLinkCreate, db: Session = Depends(get_db)):
-    return automation_service.create_device_link(
-        db=db,
-        source_device_uid=payload.source_device_uid,
-        target_device_uid=payload.target_device_uid,
-        controller=payload.controller,
-        description=payload.description,
-        active=payload.active,
-        auto_control_enabled=payload.auto_control_enabled,
-        min_value=payload.min_value,
-        max_value=payload.max_value,
-    )
+    try:
+        return automation_service.create_device_link(
+            db=db,
+            source_device_uid=payload.source_device_uid,
+            target_device_uid=payload.target_device_uid,
+            controller=payload.controller,
+            description=payload.description,
+            active=payload.active,
+            auto_control_enabled=payload.auto_control_enabled,
+            min_value=payload.min_value,
+            max_value=payload.max_value,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/links", response_model=list[DeviceLinkOut])

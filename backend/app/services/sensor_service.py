@@ -5,11 +5,12 @@ from app.models.device import Device
 from app.models.device_link import DeviceLink
 from app.models.sensor_data import SensorData
 from app.schemas.sensor_schema import SensorDataCreate
-from app.services import actuator_service
+from app.services import actuator_service, automation_service
 
 TEMPERATURE_CONTROL_STEP = 0.45
 RANDOM_BLEND_FACTOR = 0.2
-VENTILATION_STEP_ON = -0.7
+VENTILATION_HUMIDITY_AIR_STEP_ON = -1.0
+VENTILATION_HUMIDITY_AIR_STEP_OFF = 0.3
 IRRIGATION_STEP_ON = 1.2
 IRRIGATION_STEP_OFF = -0.35
 LIGHT_STEP_ON = 8.0
@@ -106,10 +107,17 @@ def ingest_sensor_data(db: Session, payload: SensorDataCreate) -> SensorData:
         actuator = db.query(Actuator).filter(Actuator.device_uid == link.target_device_uid).first()
         if not actuator:
             continue
+        target_device = db.query(Device).filter(Device.device_uid == link.target_device_uid).first()
+        if not target_device:
+            continue
+        if not automation_service.are_devices_compatible(
+            device.device_type or "",
+            target_device.device_type or "",
+        ):
+            continue
         sensor_kind = (payload.sensor_type or device.device_type or "").lower()
         actuator_kind = (actuator.actuator_type or "").lower()
         if not actuator_kind or actuator_kind == "unknown":
-            target_device = db.query(Device).filter(Device.device_uid == link.target_device_uid).first()
             actuator_kind = (target_device.device_type or "").lower() if target_device else ""
         working_value = previous_value if actuator.state == "ON" else adjusted_value
         if actuator.state == "ON":
@@ -125,13 +133,15 @@ def ingest_sensor_data(db: Session, payload: SensorDataCreate) -> SensorData:
                         adjusted_value = working_value + max(delta, -TEMPERATURE_CONTROL_STEP)
                 else:
                     adjusted_value = working_value
-            elif "temp" in sensor_kind and "vent" in actuator_kind:
-                adjusted_value = working_value + VENTILATION_STEP_ON
+            elif "humidity_air" in sensor_kind and "vent" in actuator_kind:
+                adjusted_value = max(0.0, working_value + VENTILATION_HUMIDITY_AIR_STEP_ON)
             elif "light" in sensor_kind and "light" in actuator_kind:
                 adjusted_value = working_value + LIGHT_STEP_ON
         else:
             if "soil" in sensor_kind and "irrig" in actuator_kind:
                 adjusted_value = max(0.0, working_value + IRRIGATION_STEP_OFF)
+            elif "humidity_air" in sensor_kind and "vent" in actuator_kind:
+                adjusted_value = min(100.0, working_value + VENTILATION_HUMIDITY_AIR_STEP_OFF)
             elif "light" in sensor_kind and "light" in actuator_kind:
                 adjusted_value = max(0.0, working_value + LIGHT_STEP_OFF)
 
@@ -148,6 +158,13 @@ def ingest_sensor_data(db: Session, payload: SensorDataCreate) -> SensorData:
             continue
         actuator = db.query(Actuator).filter(Actuator.device_uid == link.target_device_uid).first()
         target_device = db.query(Device).filter(Device.device_uid == link.target_device_uid).first()
+        if not target_device:
+            continue
+        if not automation_service.are_devices_compatible(
+            device.device_type or "",
+            target_device.device_type or "",
+        ):
+            continue
         target_actuator_type = target_device.device_type if target_device else None
         is_on = bool(actuator and actuator.state == "ON")
         should_turn_on = _should_turn_on(link, adjusted_value)

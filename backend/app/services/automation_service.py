@@ -1,10 +1,82 @@
 from sqlalchemy.orm import Session
 
+from app.models.device import Device
 from app.models.device_link import DeviceLink
 from app.models.automation_rule import AutomationRule
 from app.models.sensor_data import SensorData
 
 UNSET = object()
+
+
+def _sensor_domain(device_type: str) -> str | None:
+    normalized = (device_type or "").upper()
+    if "TEMP" in normalized:
+        return "temperature"
+    if "HUMIDITY_SOIL" in normalized or ("SOIL" in normalized and "HUMIDITY" in normalized):
+        return "soil_humidity"
+    if "HUMIDITY_AIR" in normalized or ("AIR" in normalized and "HUMIDITY" in normalized):
+        return "air_humidity"
+    if "LIGHT" in normalized:
+        return "light"
+    return None
+
+
+def _actuator_domain(device_type: str) -> str | None:
+    normalized = (device_type or "").upper()
+    if "HEATER" in normalized or "TEMP" in normalized:
+        return "temperature"
+    if "VENT" in normalized:
+        return "air_humidity"
+    if "IRRIG" in normalized:
+        return "soil_humidity"
+    if "LIGHT" in normalized:
+        return "light"
+    return None
+
+
+def _sensor_display_name(device_type: str) -> str:
+    domain = _sensor_domain(device_type)
+    if domain == "temperature":
+        return "датчик температуры"
+    if domain == "soil_humidity":
+        return "датчик влажности почвы"
+    if domain == "air_humidity":
+        return "датчик влажности воздуха"
+    if domain == "light":
+        return "датчик освещенности"
+    return f"датчик ({device_type})"
+
+
+def _actuator_display_name(device_type: str) -> str:
+    domain = _actuator_domain(device_type)
+    if domain == "temperature":
+        return "актуатор температуры"
+    if domain == "soil_humidity":
+        return "актуатор полива"
+    if domain == "air_humidity":
+        return "актуатор вентиляции"
+    if domain == "light":
+        return "актуатор освещения"
+    return f"актуатор ({device_type})"
+
+
+def _expected_sensor_for_actuator(device_type: str) -> str:
+    domain = _actuator_domain(device_type)
+    if domain == "temperature":
+        return "датчик температуры"
+    if domain == "soil_humidity":
+        return "датчик влажности почвы"
+    if domain == "air_humidity":
+        return "датчик влажности воздуха"
+    if domain == "light":
+        return "датчик освещенности"
+    return "совместимый датчик"
+
+
+def are_devices_compatible(source_type: str, target_type: str) -> bool:
+    sensor_domain = _sensor_domain(source_type)
+    actuator_domain = _actuator_domain(target_type)
+    return bool(sensor_domain and actuator_domain and sensor_domain == actuator_domain)
 
 
 def create_rule(
@@ -52,6 +124,26 @@ def create_device_link(
     min_value: float | None = None,
     max_value: float | None = None,
 ) -> DeviceLink:
+    source_device = db.query(Device).filter(Device.device_uid == source_device_uid).first()
+    if not source_device:
+        raise LookupError(f"Source device '{source_device_uid}' not found")
+    target_device = db.query(Device).filter(Device.device_uid == target_device_uid).first()
+    if not target_device:
+        raise LookupError(f"Target device '{target_device_uid}' not found")
+
+    if "SENSOR" not in (source_device.device_type or ""):
+        raise ValueError("Source device must be a sensor")
+    if "ACTUATOR" not in (target_device.device_type or ""):
+        raise ValueError("Target device must be an actuator")
+    if not are_devices_compatible(source_device.device_type, target_device.device_type):
+        source_name = _sensor_display_name(source_device.device_type or "")
+        actuator_name = _actuator_display_name(target_device.device_type or "")
+        expected_sensor = _expected_sensor_for_actuator(target_device.device_type or "")
+        raise ValueError(
+            f"Несовместимая связь: {source_name} не может быть связан с {actuator_name}. "
+            f"Для {actuator_name} нужен {expected_sensor}."
+        )
+
     link = DeviceLink(
         source_device_uid=source_device_uid,
         target_device_uid=target_device_uid,

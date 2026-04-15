@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardState, DashboardState } from "../api/dashboardApi";
-import { Device, fetchAssignedDevices, fetchDeviceByUid } from "../api/devicesApi";
+import {
+  Device,
+  fetchAssignedDevices,
+  fetchDeviceByUid,
+  fetchDeviceHeartbeats,
+  DeviceHeartbeat,
+} from "../api/devicesApi";
 import { createDeviceLink, deleteDeviceLink, updateDeviceLink } from "../api/automationApi";
 import { controlActuator } from "../api/actuatorsApi";
 import { DeviceInfoBlock } from "../components/DeviceInfoBlock";
@@ -13,8 +19,12 @@ interface DashboardPageProps {
 }
 
 export function DashboardPage({ isAdmin }: DashboardPageProps) {
+  const HEARTBEAT_ONLINE_SENSOR_SECONDS = 20;
+  const HEARTBEAT_ONLINE_ACTUATOR_SECONDS = 20;
+  const HEARTBEAT_ONLINE_DEFAULT_SECONDS = 25;
   const [state, setState] = useState<DashboardState | null>(null);
   const [assignedDevices, setAssignedDevices] = useState<Device[]>([]);
+  const [heartbeats, setHeartbeats] = useState<Record<string, DeviceHeartbeat>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsUid, setDetailsUid] = useState<string | null>(null);
@@ -28,6 +38,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const [linkMaxValue, setLinkMaxValue] = useState("");
   const [linkAutoControlEnabled, setLinkAutoControlEnabled] = useState(false);
   const [linkSaving, setLinkSaving] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const parseThresholdValue = (raw: string): number | undefined => {
     const normalized = raw.trim().replace(",", ".");
@@ -40,12 +51,14 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [dashboardData, assignedData] = await Promise.all([
+      const [dashboardData, assignedData, heartbeatsData] = await Promise.all([
         fetchDashboardState(),
         fetchAssignedDevices(),
+        fetchDeviceHeartbeats(),
       ]);
       setState(dashboardData);
       setAssignedDevices(assignedData);
+      setHeartbeats(heartbeatsData || {});
     } catch (e: unknown) {
       setError("Не удалось загрузить состояние теплицы");
     } finally {
@@ -90,6 +103,52 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     alignItems: "center",
   };
 
+  const getOnlineTimeoutSeconds = (deviceType: string): number => {
+    const normalized = (deviceType || "").toUpperCase();
+    if (normalized.includes("SENSOR")) return HEARTBEAT_ONLINE_SENSOR_SECONDS;
+    if (normalized.includes("ACTUATOR")) return HEARTBEAT_ONLINE_ACTUATOR_SECONDS;
+    return HEARTBEAT_ONLINE_DEFAULT_SECONDS;
+  };
+
+  const formatHeartbeatTs = (tsRaw?: string): string => {
+    if (!tsRaw) return "нет данных";
+    const ts = Date.parse(tsRaw);
+    if (Number.isNaN(ts)) return "нет данных";
+    return new Date(ts).toLocaleTimeString();
+  };
+
+  const getOnlineStatus = (
+    deviceUid: string,
+    fallbackDeviceType?: string,
+  ): { online: boolean; label: "Онлайн" | "Офлайн"; title: string } => {
+    const heartbeat = heartbeats?.[deviceUid];
+    const tsRaw = heartbeat?.ts;
+    const heartbeatDeviceType = heartbeat?.device_type || fallbackDeviceType || "";
+    const timeoutSeconds = getOnlineTimeoutSeconds(heartbeatDeviceType);
+    const lastPulse = formatHeartbeatTs(tsRaw);
+    if (!tsRaw) {
+      return {
+        online: false,
+        label: "Офлайн",
+        title: `Последний пульс: ${lastPulse}`,
+      };
+    }
+    const ts = Date.parse(tsRaw);
+    if (Number.isNaN(ts)) {
+      return {
+        online: false,
+        label: "Офлайн",
+        title: `Последний пульс: ${lastPulse}`,
+      };
+    }
+    const online = Date.now() - ts <= timeoutSeconds * 1000;
+    return {
+      online,
+      label: online ? "Онлайн" : "Офлайн",
+      title: `Последний пульс: ${lastPulse}`,
+    };
+  };
+
   const sensorsWithData = new Set((state?.sensors || []).map((s) => s.device_uid));
   const actuatorsWithData = new Set((state?.actuators || []).map((a) => a.device_uid));
   const sensorDevices = assignedDevices.filter((d) => d.device_type.includes("SENSOR"));
@@ -112,6 +171,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
   const saveLink = async () => {
     if (!linkSourceUid || !linkTargetUid) return;
     setLinkSaving(true);
+    setLinkError(null);
     try {
       await createDeviceLink({
         source_device_uid: linkSourceUid,
@@ -128,6 +188,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
       setLinkMaxValue("");
       setLinkAutoControlEnabled(false);
       await load();
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setLinkError(typeof detail === "string" ? detail : "Не удалось создать связь");
     } finally {
       setLinkSaving(false);
     }
@@ -208,6 +271,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 {(() => {
                   const device = assignedDevices.find((d) => d.device_uid === s.device_uid);
                   const isActive = device?.status === "active";
+                  const onlineStatus = getOnlineStatus(s.device_uid, device?.device_type || s.sensor_type || "");
                   return (
                     <div>
                       <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID датчика: "}{s.device_uid}</div>
@@ -218,6 +282,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                           </div>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                             {"Значение:"} {s.value}
+                          </div>
+                          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                              }}
+                            />
+                            <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                              {onlineStatus.label}
+                            </span>
                           </div>
                           <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
                             <span
@@ -255,6 +333,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                         <>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                             {"Тип датчика:"} {device?.device_type || s.sensor_type || "sensor"}
+                          </div>
+                          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                              }}
+                            />
+                            <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                              {onlineStatus.label}
+                            </span>
                           </div>
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Датчик не активен</div>
                         </>
@@ -303,15 +395,34 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
             ))}
             {sensorDevicesWithoutData.map((d) => (
               <div key={d.device_uid} style={cardStyle}>
+                {(() => {
+                  const onlineStatus = getOnlineStatus(d.device_uid, d.device_type || "");
+                  return (
                 <div>
                   <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID датчика: "}{d.device_uid}</div>
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                     {"Тип датчика:"} {d.device_type || "SENSOR"}
                   </div>
+                  <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        display: "inline-block",
+                        background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                      }}
+                    />
+                    <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                      {onlineStatus.label}
+                    </span>
+                  </div>
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                     {"Статус: "}{d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
                   </div>
                 </div>
+                  );
+                })()}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <button
                     type="button"
@@ -374,6 +485,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   {(() => {
                     const device = assignedDevices.find((d) => d.device_uid === a.device_uid);
                     const isActive = device?.status === "active";
+                    const onlineStatus = getOnlineStatus(a.device_uid, device?.device_type || a.actuator_type || "");
                     const isAutoControlled = autoControlledActuatorUids.has(a.device_uid);
                     const isLinked = linkedActuatorUids.has(a.device_uid);
                     const normalizedState = (a.state ?? "").trim().toUpperCase();
@@ -405,6 +517,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                           {isActive ? (
                             <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                               {"Тип устройства: "}{a.actuator_type}
+                              <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                    background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                                  }}
+                                />
+                                <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                                  {onlineStatus.label}
+                                </span>
+                              </div>
                               <div>
                                 <span style = {{fontSize: "0.95rem", fontWeight: 500}}> {"Состояние: "}</span>
                                 <span
@@ -431,6 +557,20 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                             <>
                               <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                                 {"Тип устройства: "}{device?.device_type || a.actuator_type}
+                              </div>
+                              <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                    background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                                  }}
+                                />
+                                <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                                  {onlineStatus.label}
+                                </span>
                               </div>
                               <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Актуатор не активен</div>
                             </>
@@ -515,10 +655,27 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               ))}
               {actuatorDevicesWithoutData.map((d) => (
                 <div key={d.device_uid} style={cardStyle}>
+                  {(() => {
+                    const onlineStatus = getOnlineStatus(d.device_uid, d.device_type || "");
+                    return (
                   <div>
                     <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID актуатора:"} {d.device_uid}</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                       {"Тип устройства: "}{d.device_type}
+                      <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            display: "inline-block",
+                            background: onlineStatus.online ? "#22c55e" : "#ef4444",
+                          }}
+                        />
+                        <span style={{ fontSize: "0.75rem", color: "#9ca3af" }} title={onlineStatus.title}>
+                          {onlineStatus.label}
+                        </span>
+                      </div>
                       {d.status === "active" ? (
                         <div style={{ marginTop: 4 }}>
                           <span style={{ fontSize: "0.95rem", fontWeight: 500 }}>{"Состояние: "}</span>
@@ -544,6 +701,8 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       )}
                     </div>
                   </div>
+                    );
+                  })()}
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <button
                       type="button"
@@ -600,14 +759,15 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
           Здесь видно, какие устройства связаны между собой (датчик to актуатор/исполнитель).
         </p>
         {isAdmin && (
-          <div
-            style={{
-              display: "grid",
-              gap: "0.5rem",
-              gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr auto",
-              marginBottom: "1rem",
-            }}
-          >
+          <>
+            <div
+              style={{
+                display: "grid",
+                gap: "0.5rem",
+                gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr auto",
+                marginBottom: "1rem",
+              }}
+            >
             <select
               value={linkSourceUid}
               onChange={(e) => setLinkSourceUid(e.target.value)}
@@ -676,7 +836,13 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               />
               Авто
             </label>
-          </div>
+            </div>
+            {linkError && (
+              <p style={{ marginTop: "0.5rem", color: "#fecaca", fontSize: "0.85rem" }}>
+                {linkError}
+              </p>
+            )}
+          </>
         )}
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {(state?.links || []).length === 0 && (

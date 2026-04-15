@@ -47,6 +47,10 @@ def get_device_by_uid(db: Session, device_uid: str) -> Device | None:
     return db.query(Device).filter(Device.device_uid == device_uid).first()
 
 
+def get_all_devices(db: Session) -> list[Device]:
+    return db.query(Device).order_by(Device.id.asc()).all()
+
+
 def log_change_history(
     device: Device,
     field: str,
@@ -79,6 +83,18 @@ def assign_device(db: Session, device_uid: str, location: str) -> Device | None:
     device.status = "active"
     db.commit()
     db.refresh(device)
+    return device
+
+
+def disable_device(db: Session, device_uid: str, changed_by: str | None = None) -> Device | None:
+    device = db.query(Device).filter(Device.device_uid == device_uid).first()
+    if not device:
+        return None
+    if device.status != "disabled":
+        log_change_history(device, "status", device.status, "disabled", changed_by)
+        device.status = "disabled"
+        db.commit()
+        db.refresh(device)
     return device
 
 

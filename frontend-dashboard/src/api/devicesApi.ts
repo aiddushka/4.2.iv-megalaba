@@ -25,6 +25,14 @@ export interface Device {
     | null;
 }
 
+export interface DeviceHeartbeat {
+  device_uid?: string;
+  device_type?: string;
+  status?: string;
+  state?: string;
+  ts?: string;
+}
+
 export interface AssignDevicePayload {
   device_uid: string;
   location: string;
@@ -82,6 +90,11 @@ export async function deleteDeviceConfig(deviceUid: string) {
 
 export async function fetchDeviceByUid(deviceUid: string) {
   const { data } = await apiClient.get<Device>(`/devices/${encodeURIComponent(deviceUid)}`);
+  return data;
+}
+
+export async function fetchDeviceHeartbeats() {
+  const { data } = await apiClient.get<Record<string, DeviceHeartbeat>>("/devices/heartbeats");
   return data;
 }
 
