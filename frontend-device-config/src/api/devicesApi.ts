@@ -17,3 +17,30 @@ export async function registerDevice(payload: RegisterDevicePayload) {
   return data;
 }
 
+export interface PublicDeviceRow {
+  device_uid: string;
+  device_type: string;
+  location: string | null;
+  status: string;
+  accepts_data: boolean;
+  linked_device_uids: string[];
+}
+
+export async function fetchDevicesPublic() {
+  const { data } = await apiClient.get<PublicDeviceRow[]>("/devices/public/list");
+  return data;
+}
+
+export async function setDeviceRuntimePublic(deviceUid: string, status: "active" | "disabled") {
+  const { data } = await apiClient.patch(
+    `/devices/public/${encodeURIComponent(deviceUid)}/runtime`,
+    { status },
+  );
+  return data;
+}
+
+export async function deleteDevicePublic(deviceUid: string) {
+  const { data } = await apiClient.delete(`/devices/public/${encodeURIComponent(deviceUid)}`);
+  return data;
+}
+

@@ -29,6 +29,7 @@ class DeviceCreate(DeviceBase):
 class DeviceOut(DeviceBase):
     id: int
     status: str
+    accepts_data: bool
     location: str | None = None
     last_maintenance: datetime | None = None
     maintenance_notes: str | None = None
@@ -47,6 +48,7 @@ class DeviceUpdate(BaseModel):
     description: str | None = None
     location: str | None = None
     status: str | None = None
+    accepts_data: bool | None = None
     last_maintenance: datetime | None = None
     maintenance_notes: str | None = None
 

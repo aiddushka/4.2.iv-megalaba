@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { deleteDeviceConfig, assignDevice, fetchUnassignedDevices, Device, updateDeviceConfig } from "../api/devicesApi";
+import { assignDevice, fetchUnassignedDevices, Device, updateDeviceConfig } from "../api/devicesApi";
 
 export function UnassignedDevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -37,17 +37,6 @@ export function UnassignedDevicesPage() {
       await load();
     } finally {
       setAssigningId(null);
-    }
-  };
-
-  const handleCancel = async (device: Device) => {
-    if (confirm(`Удалить регистрацию устройства ${device.device_uid}?`)) {
-      try {
-        await deleteDeviceConfig(device.device_uid);
-        await load();
-      } catch (e) {
-        setError("Не удалось удалить регистрацию");
-      } 
     }
   };
 
@@ -114,21 +103,6 @@ export function UnassignedDevicesPage() {
                 }}
               >
                 {assigningId === d.id ? "Устанавливаем..." : "Установить"}
-              </button>
-              <button
-                onClick={() => handleCancel(d)}
-                style={{
-                  padding: "0.4rem 0.9rem",
-                  borderRadius: 999,
-                  border: "none",
-                  background: "linear-gradient(90deg,#dc2626,#dc2626)",
-                  color: "#ffffff",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Удалить
               </button>
             </div>
           </div>

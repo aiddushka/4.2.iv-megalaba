@@ -8,7 +8,9 @@ interface Props {
 }
 
 export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
-  const [status, setStatus] = useState(device.status || "active");
+  const [acceptsData, setAcceptsData] = useState(
+    device.accepts_data === undefined ? true : Boolean(device.accepts_data),
+  );
   const [location, setLocation] = useState(device.location || "");
   const [lastMaintenance, setLastMaintenance] = useState(
     device.last_maintenance ? device.last_maintenance.slice(0, 10) : "",
@@ -18,7 +20,7 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    setStatus(device.status || "active");
+    setAcceptsData(device.accepts_data === undefined ? true : Boolean(device.accepts_data));
     setLocation(device.location || "");
     setLastMaintenance(device.last_maintenance ? device.last_maintenance.slice(0, 10) : "");
     setMaintenanceNotes(device.maintenance_notes || "");
@@ -30,7 +32,7 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
     try {
       await updateDeviceConfig(device.device_uid, {
         location,
-        status: isAdmin ? status : undefined,
+        accepts_data: isAdmin ? acceptsData : undefined,
         last_maintenance: isAdmin && lastMaintenance ? new Date(lastMaintenance).toISOString() : undefined,
         maintenance_notes: isAdmin ? maintenanceNotes : undefined,
       });
@@ -48,17 +50,16 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
       <h4 style={{ margin: "0 0 0.75rem 0", color: "#22c55e" }}>Управление устройством</h4>
       <div style={{ marginBottom: 8 }}>
         <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 4 }}>
-          Статус
+          Принимаем данные
         </label>
         <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          value={acceptsData ? "yes" : "no"}
+          onChange={(e) => setAcceptsData(e.target.value === "yes")}
           disabled={!isAdmin}
           style={{ width: "100%", padding: "0.5rem", background: "#0f172a", border: "1px solid #1f2937", borderRadius: 8, color: "#e5e7eb" }}
         >
-          <option value="active">Активно</option>
-          <option value="maintenance">Обслуживание</option>
-          <option value="offline">Не в сети</option>
+          <option value="yes">Принимаем данные</option>
+          <option value="no">Не принимаем данные</option>
         </select>
       </div>
       <div style={{ marginBottom: 8 }}>

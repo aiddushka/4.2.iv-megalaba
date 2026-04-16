@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
@@ -20,6 +20,7 @@ class Device(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     location = Column(String(255), nullable=True)
     status = Column(String(50), default="active")
+    accepts_data = Column(Boolean, nullable=False, default=True)
     last_maintenance = Column(DateTime, nullable=True)
     maintenance_notes = Column(String(512), nullable=True)
     change_history = Column(JSON, nullable=True)

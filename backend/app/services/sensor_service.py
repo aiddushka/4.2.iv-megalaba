@@ -84,8 +84,12 @@ def ingest_sensor_data(db: Session, payload: SensorDataCreate) -> SensorData:
     device = db.query(Device).filter(Device.device_uid == payload.device_uid).first()
     if not device:
         raise LookupError("Device not found")
-    if device.status != "active":
-        raise RuntimeError("Device is not active yet")
+    if hasattr(device, "accepts_data") and not bool(device.accepts_data):
+        raise RuntimeError("Device is not accepting data")
+    # После регистрации (status=unassigned) контейнер уже может быть запущен и слать данные —
+    # принимаем их так же, как для active. Останавливаем обработку только при disabled.
+    if device.status == "disabled":
+        raise RuntimeError("Device is disabled")
     if "SENSOR" not in (device.device_type or ""):
         raise ValueError("Device is not a sensor")
 

@@ -1,19 +1,32 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-04-15T18:49:10Z",
+  "updated_at": "2026-04-16T10:13:37Z",
   "devices": {
-    "12": {
-      "device_uid": "12",
+    "123213": {
+      "device_uid": "123213",
       "device_type": "TEMP_SENSOR",
-      "container_id": "e634363689f5b0d1b25a77321d591f35ff42f308525da84bb7dd1132207393cb",
-      "container_name": "greenhouse_device_12",
+      "container_id": "3a9bcf21107f0a71b53e49a7851dfc2e66dd010f836ed3171ced0c39ff0327c4",
+      "container_name": "greenhouse_device_123213",
       "assigned_ip": "172.28.1.10",
       "status": "running",
       "desired_runtime_state": "running",
       "actual_runtime_state": "running",
       "restart_count": 0,
       "last_error": null,
-      "updated_at": "2026-04-15T18:49:10Z"
+      "updated_at": "2026-04-16T10:13:37Z"
+    },
+    "eqweqqw": {
+      "device_uid": "eqweqqw",
+      "device_type": "TEMP_SENSOR",
+      "container_id": "b4225747a6bd0bcf74867f1c20e7ae3701af2da97797160a2c554896563b20eb",
+      "container_name": "greenhouse_device_eqweqqw",
+      "assigned_ip": "172.28.1.11",
+      "status": "running",
+      "desired_runtime_state": "running",
+      "actual_runtime_state": "running",
+      "restart_count": 0,
+      "last_error": null,
+      "updated_at": "2026-04-16T10:13:37Z"
     }
   }
 }

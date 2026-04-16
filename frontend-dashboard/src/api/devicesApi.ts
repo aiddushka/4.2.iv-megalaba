@@ -11,6 +11,7 @@ export interface Device {
   bus_address?: string | null;
   components?: string[] | null;
   status: string;
+  accepts_data?: boolean;
   location?: string | null;
   last_maintenance?: string | null;
   maintenance_notes?: string | null;
@@ -69,6 +70,7 @@ export interface UpdateDevicePayload {
   description?: string | null;
   location?: string | null;
   status?: string | null;
+  accepts_data?: boolean | null;
   last_maintenance?: string | null;
   maintenance_notes?: string | null;
 }

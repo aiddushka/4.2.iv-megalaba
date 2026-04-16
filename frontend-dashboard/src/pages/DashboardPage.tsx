@@ -12,7 +12,6 @@ import { controlActuator } from "../api/actuatorsApi";
 import { DeviceInfoBlock } from "../components/DeviceInfoBlock";
 import { DeviceManagementBlock } from "../components/DeviceManagementBlock";
 import { DeviceHistoryBlock } from "../components/DeviceHistoryBlock";
-import { deleteDeviceConfig } from "../api/devicesApi";
 
 interface DashboardPageProps {
   isAdmin: boolean;
@@ -216,22 +215,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     await load();
   };
 
-  
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const handleDelete = async (deviceUid: string) => {
-    if (confirm(`Удалить устройство "${deviceUid}"? Это действие нельзя отменить.`)) {
-      try {
-        await deleteDeviceConfig(deviceUid);
-        setRefreshTrigger(prev => prev + 1);  // форсируем ререндер
-        await load();
-      } catch (error) {
-        setError("Не удалось удалить устройство");
-      }
-    }
-  };
-
-  // В useEffect добавить refreshTrigger в зависимости
   useEffect(() => {
     let mounted = true;
     load();
@@ -242,7 +225,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
       mounted = false;
       clearInterval(id);
     };
-  }, [refreshTrigger]);  // ← добавить
+  }, []);
 
   return (
     <>
@@ -373,23 +356,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   >
                     Подробнее
                   </button>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(s.device_uid)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #7f1d1d",
-                        background: "transparent",
-                        color: "#fca5a5",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
@@ -439,23 +405,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                   >
                     Подробнее
                   </button>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(d.device_uid)}
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        borderRadius: 6,
-                        border: "1px solid #7f1d1d",
-                        background: "transparent",
-                        color: "#fca5a5",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
@@ -630,23 +579,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                           >
                             Подробнее
                           </button>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(a.device_uid)}
-                              style={{
-                                padding: "0.25rem 0.5rem",
-                                fontSize: "0.75rem",
-                                borderRadius: 6,
-                                border: "1px solid #7f1d1d",
-                                background: "transparent",
-                                color: "#fca5a5",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Удалить
-                            </button>
-                          )}
                         </div>
                       </>
                     );
@@ -719,23 +651,6 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     >
                       Подробнее
                     </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(d.device_uid)}
-                        style={{
-                          padding: "0.25rem 0.5rem",
-                          fontSize: "0.75rem",
-                          borderRadius: 6,
-                          border: "1px solid #7f1d1d",
-                          background: "transparent",
-                          color: "#fca5a5",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}

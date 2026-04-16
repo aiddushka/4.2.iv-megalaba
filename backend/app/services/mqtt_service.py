@@ -8,6 +8,7 @@ from app.database.session import SessionLocal
 from app.services import actuator_service
 from app.schemas.sensor_schema import SensorDataCreate
 from app.services import sensor_service
+from app.models.device import Device
 
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
@@ -51,6 +52,10 @@ def _handle_sensor_payload(payload_dict: dict[str, Any]) -> None:
 
     db = SessionLocal()
     try:
+        device = db.query(Device).filter(Device.device_uid == payload.device_uid).first()
+        if device is not None and hasattr(device, "accepts_data") and not bool(device.accepts_data):
+            # Устройство продолжает отправлять данные, но бекенд их не обрабатывает.
+            return
         sensor_service.ingest_sensor_data(db, payload)
     except Exception as exc:
         print(f"[mqtt] failed to ingest sensor payload: {exc}")

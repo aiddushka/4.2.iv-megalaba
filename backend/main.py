@@ -38,6 +38,11 @@ def create_app() -> FastAPI:
             conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS components JSON"))
             conn.execute(
                 text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS accepts_data BOOLEAN NOT NULL DEFAULT TRUE"
+                )
+            )
+            conn.execute(
+                text(
                     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_maintenance TIMESTAMP"
                 )
             )

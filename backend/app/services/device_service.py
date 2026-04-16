@@ -104,6 +104,7 @@ def update_device(
     description: str | None = None,
     location: str | None = None,
     status: str | None = None,
+    accepts_data: bool | None = None,
     last_maintenance: datetime | None = None,
     maintenance_notes: str | None = None,
     changed_by: str | None = None,
@@ -120,6 +121,9 @@ def update_device(
     if status is not None:
         log_change_history(device, "status", device.status, status, changed_by)
         device.status = status
+    if accepts_data is not None:
+        log_change_history(device, "accepts_data", bool(device.accepts_data), bool(accepts_data), changed_by)
+        device.accepts_data = bool(accepts_data)
     if last_maintenance is not None:
         log_change_history(
             device,

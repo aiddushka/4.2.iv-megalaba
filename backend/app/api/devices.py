@@ -105,7 +105,9 @@ def get_orchestration_state(db: Session = Depends(get_db)):
             "device_uid": d.device_uid,
             "device_type": d.device_type,
             "status": d.status,
-            "desired_runtime_state": "running" if d.status == "active" else "stopped",
+            # Контейнеры должны подниматься сразу после регистрации устройства (status=unassigned),
+            # и останавливаться только при явном выключении (status=disabled).
+            "desired_runtime_state": "stopped" if d.status == "disabled" else "running",
         }
         for d in devices
     ]
@@ -192,6 +194,7 @@ def update_device_config(
         description=payload.description,
         location=payload.location,
         status=payload.status,
+        accepts_data=payload.accepts_data,
         last_maintenance=payload.last_maintenance,
         maintenance_notes=payload.maintenance_notes,
         changed_by=current_user.username,
@@ -199,3 +202,80 @@ def update_device_config(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     return device
+
+
+@router.get("/public/list")
+def list_devices_public(db: Session = Depends(get_db)):
+    """
+    Публичный список устройств для конфигуратора (порт 3001).
+    Возвращает базовую информацию + "с кем связь".
+    """
+    devices = device_service.get_all_devices(db)
+    links = db.query(DeviceLink).filter(DeviceLink.active == True).all()
+    linked_by_uid: dict[str, set[str]] = {}
+    for link in links:
+        linked_by_uid.setdefault(link.source_device_uid, set()).add(link.target_device_uid)
+        linked_by_uid.setdefault(link.target_device_uid, set()).add(link.source_device_uid)
+
+    def _linked(u: str) -> list[str]:
+        return sorted(list(linked_by_uid.get(u, set())))
+
+    return [
+        {
+            "device_uid": d.device_uid,
+            "device_type": d.device_type,
+            "location": d.location,
+            "status": d.status,
+            "accepts_data": bool(getattr(d, "accepts_data", True)),
+            "linked_device_uids": _linked(d.device_uid),
+        }
+        for d in devices
+    ]
+
+
+@router.patch("/public/{device_uid}/runtime")
+def set_device_runtime_public(
+    device_uid: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Публичное включение/выключение устройства для конфигуратора (порт 3001).
+    Меняет Device.status между 'active' и 'disabled' (контейнер старт/стоп делается sensor-emulator-manager).
+    """
+    status_value = payload.get("status")
+    if status_value not in {"active", "disabled"}:
+        raise HTTPException(status_code=400, detail="status must be 'active' or 'disabled'")
+    device = device_service.update_device(
+        db=db,
+        device_uid=device_uid,
+        status=status_value,
+        changed_by="public-configurator",
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"ok": True, "device_uid": device_uid, "status": device.status}
+
+
+@router.delete("/public/{device_uid}")
+def delete_device_public(device_uid: str, db: Session = Depends(get_db)):
+    """
+    Публичное удаление устройства для конфигуратора (порт 3001).
+    Удаляет запись из БД; контейнер будет удалён менеджером, когда устройство исчезнет из orchestration-state.
+    """
+    device = db.query(Device).filter(Device.device_uid == device_uid).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Устройство не найдено")
+
+    from app.models.actuator import Actuator
+    from app.models.sensor_data import SensorData
+
+    db.query(Actuator).filter(Actuator.device_uid == device_uid).delete()
+    db.query(SensorData).filter(SensorData.device_uid == device_uid).delete()
+    db.query(DeviceLink).filter(
+        (DeviceLink.source_device_uid == device_uid) | (DeviceLink.target_device_uid == device_uid)
+    ).delete()
+    db.delete(device)
+    db.commit()
+
+    return {"ok": True, "message": f"Устройство {device_uid} удалено"}
