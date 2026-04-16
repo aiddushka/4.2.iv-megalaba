@@ -254,6 +254,8 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 {(() => {
                   const device = assignedDevices.find((d) => d.device_uid === s.device_uid);
                   const isActive = device?.status === "active";
+                  const acceptsData = device?.accepts_data !== false;
+                  const acceptsDataLabel = acceptsData ? "Принимаем данные" : "Не принимаем данные";
                   const onlineStatus = getOnlineStatus(s.device_uid, device?.device_type || s.sensor_type || "");
                   return (
                     <div>
@@ -280,6 +282,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                               {onlineStatus.label}
                             </span>
                           </div>
+                          {!acceptsData && (
+                            <div style={{ marginTop: 4, fontSize: "0.75rem", color: "#9ca3af" }}>
+                              Состояние: {acceptsDataLabel}
+                            </div>
+                          )}
                           <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
                             <span
                               style={{
@@ -331,6 +338,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                               {onlineStatus.label}
                             </span>
                           </div>
+                          {!acceptsData && (
+                            <div style={{ marginTop: 4, fontSize: "0.75rem", color: "#9ca3af" }}>
+                              Состояние: {acceptsDataLabel}
+                            </div>
+                          )}
                           <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>Датчик не активен</div>
                         </>
                       )}
@@ -363,6 +375,8 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               <div key={d.device_uid} style={cardStyle}>
                 {(() => {
                   const onlineStatus = getOnlineStatus(d.device_uid, d.device_type || "");
+                  const acceptsData = d.accepts_data !== false;
+                  const acceptsDataLabel = acceptsData ? "Принимаем данные" : "Не принимаем данные";
                   return (
                 <div>
                   <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>{"UID датчика: "}{d.device_uid}</div>
@@ -383,6 +397,11 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                       {onlineStatus.label}
                     </span>
                   </div>
+                  {!acceptsData && (
+                    <div style={{ marginTop: 4, fontSize: "0.75rem", color: "#9ca3af" }}>
+                      Состояние: {acceptsDataLabel}
+                    </div>
+                  )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
                     {"Статус: "}{d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
                   </div>

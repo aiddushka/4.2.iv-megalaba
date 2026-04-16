@@ -246,10 +246,21 @@ def set_device_runtime_public(
     status_value = payload.get("status")
     if status_value not in {"active", "disabled"}:
         raise HTTPException(status_code=400, detail="status must be 'active' or 'disabled'")
+    existing = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    # Важно: регистрация на 3001 создаёт устройство как unassigned.
+    # Кнопка "Включить" должна запускать контейнер, не переводя устройство в active
+    # (иначе оно пропадёт со страницы /unassigned на дашборде).
+    next_status = status_value
+    if status_value == "active" and existing.status == "disabled":
+        next_status = "unassigned"
+
     device = device_service.update_device(
         db=db,
         device_uid=device_uid,
-        status=status_value,
+        status=next_status,
         changed_by="public-configurator",
     )
     if not device:

@@ -127,10 +127,10 @@ def _fetch_orchestration_state() -> list[dict] | None:
 def _device_command(device_type: str) -> str:
     script = SENSOR_SCRIPT_BY_DEVICE_TYPE.get(device_type)
     if script:
-        return f"python {script}"
+        return f"python -u {script}"
     actuator_script = ACTUATOR_SCRIPT_BY_DEVICE_TYPE.get(device_type)
     if actuator_script:
-        return f"python {actuator_script}"
+        return f"python -u {actuator_script}"
     return "python -u -c \"import time; print('unsupported device type'); time.sleep(10**9)\""
 
 

@@ -149,8 +149,8 @@ export function RemoveDevicePage() {
           <tbody>
             {rows.map((d) => {
               const status = (d.status || "").toLowerCase();
-              const isActive = status === "active";
               const isDisabled = status === "disabled";
+              const isRunning = !isDisabled;
               const busy = busyUid === d.device_uid;
               return (
                 <tr key={d.device_uid}>
@@ -168,16 +168,16 @@ export function RemoveDevicePage() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
-                        disabled={busy || isActive}
+                        disabled={busy || isRunning}
                         onClick={() => setRuntime(d.device_uid, "active")}
                         style={{
                           ...btnBase,
                           border: "1px solid #14532d",
-                          color: isActive ? "#6b7280" : "#bbf7d0",
-                          cursor: busy || isActive ? "not-allowed" : "pointer",
-                          opacity: busy || isActive ? 0.55 : 1,
+                          color: isRunning ? "#6b7280" : "#bbf7d0",
+                          cursor: busy || isRunning ? "not-allowed" : "pointer",
+                          opacity: busy || isRunning ? 0.55 : 1,
                         }}
-                        title={isActive ? "Устройство уже включено" : "Включить устройство"}
+                        title={isRunning ? "Устройство уже включено" : "Включить устройство"}
                       >
                         Включить
                       </button>
