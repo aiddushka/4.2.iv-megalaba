@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Route, Routes, NavLink, useNavigate } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
-import { UnassignedDevicesPage } from "./pages/UnassignedDevicesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { WorkersPage } from "./pages/WorkersPage";
@@ -161,14 +160,6 @@ export default function App() {
           </NavLink>
           {isAdmin && (
             <NavLink
-              to="/unassigned"
-              style={({ isActive }) => (isActive ? activeStyle : linkStyle)}
-            >
-              Неустановленные устройства
-            </NavLink>
-          )}
-          {isAdmin && (
-            <NavLink
               to="/workers"
               style={({ isActive }) => (isActive ? activeStyle : linkStyle)}
             >
@@ -199,7 +190,6 @@ export default function App() {
       <main style={{ padding: "2rem" }}>
         <Routes>
           <Route path="/" element={<DashboardPage isAdmin={isAdmin} />} />
-          <Route path="/unassigned" element={<UnassignedDevicesPage />} />
           <Route path="/workers" element={<WorkersPage />} />
         </Routes>
       </main>

@@ -34,23 +34,8 @@ export interface DeviceHeartbeat {
   ts?: string;
 }
 
-export interface AssignDevicePayload {
-  device_uid: string;
-  location: string;
-}
-
-export async function fetchUnassignedDevices() {
-  const { data } = await apiClient.get<Device[]>("/devices/unassigned");
-  return data;
-}
-
 export async function fetchAssignedDevices() {
   const { data } = await apiClient.get<Device[]>("/devices/assigned");
-  return data;
-}
-
-export async function assignDevice(payload: AssignDevicePayload) {
-  const { data } = await apiClient.post<Device>("/devices/assign", payload);
   return data;
 }
 

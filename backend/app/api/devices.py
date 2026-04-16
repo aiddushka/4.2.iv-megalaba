@@ -105,8 +105,8 @@ def get_orchestration_state(db: Session = Depends(get_db)):
             "device_uid": d.device_uid,
             "device_type": d.device_type,
             "status": d.status,
-            # Контейнеры должны подниматься сразу после регистрации устройства (status=unassigned),
-            # и останавливаться только при явном выключении (status=disabled).
+            # Контейнеры поднимаются сразу после регистрации устройства,
+            # и останавливаются только при явном выключении (status=disabled).
             "desired_runtime_state": "stopped" if d.status == "disabled" else "running",
         }
         for d in devices
@@ -250,17 +250,10 @@ def set_device_runtime_public(
     if not existing:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    # Важно: регистрация на 3001 создаёт устройство как unassigned.
-    # Кнопка "Включить" должна запускать контейнер, не переводя устройство в active
-    # (иначе оно пропадёт со страницы /unassigned на дашборде).
-    next_status = status_value
-    if status_value == "active" and existing.status == "disabled":
-        next_status = "unassigned"
-
     device = device_service.update_device(
         db=db,
         device_uid=device_uid,
-        status=next_status,
+        status=status_value,
         changed_by="public-configurator",
     )
     if not device:

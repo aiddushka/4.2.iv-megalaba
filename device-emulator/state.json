@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-04-16T10:26:50Z",
+  "updated_at": "2026-04-16T11:17:51Z",
   "devices": {
-    "sdaas": {
-      "device_uid": "sdaas",
+    "1": {
+      "device_uid": "1",
       "device_type": "TEMP_SENSOR",
-      "container_id": "54674c99d7e44aba1f50576cfc01acf5e71f3a680a9195963fd1582eb67df301",
-      "container_name": "greenhouse_device_sdaas",
+      "container_id": "869b3e386e60f0646ede3f68e5d4e88b07dbda0cf59e2bf7407ebe73da78ee96",
+      "container_name": "greenhouse_device_1",
       "assigned_ip": "172.28.1.10",
       "status": "running",
       "desired_runtime_state": "running",
       "actual_runtime_state": "running",
       "restart_count": 0,
       "last_error": null,
-      "updated_at": "2026-04-16T10:26:50Z"
+      "updated_at": "2026-04-16T11:17:51Z"
     }
   }
 }

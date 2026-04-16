@@ -27,7 +27,9 @@ def register_device(
         bus_address=bus_address,
         components=components,
         location=location_hint,
-        status="unassigned",
+        # После регистрации устройство сразу считается установленным и видимым на Dashboard.
+        # Контейнер/эмулятор поднимется менеджером через orchestration-state.
+        status="active",
     )
     db.add(device)
     db.commit()
@@ -40,7 +42,10 @@ def get_unassigned_devices(db: Session) -> list[Device]:
 
 
 def get_assigned_devices(db: Session) -> list[Device]:
-    return db.query(Device).filter(Device.status != "unassigned").all()
+    # Исторически существовал статус `unassigned` и отдельная страница установки.
+    # Теперь устройства отображаются на Dashboard сразу после регистрации,
+    # поэтому /devices/assigned фактически возвращает полный список.
+    return get_all_devices(db)
 
 
 def get_device_by_uid(db: Session, device_uid: str) -> Device | None:

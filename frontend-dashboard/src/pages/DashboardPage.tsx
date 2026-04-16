@@ -148,6 +148,9 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
     };
   };
 
+  const isDeviceEnabled = (status?: string | null): boolean =>
+    String(status || "").toLowerCase() !== "disabled";
+
   const sensorsWithData = new Set((state?.sensors || []).map((s) => s.device_uid));
   const actuatorsWithData = new Set((state?.actuators || []).map((a) => a.device_uid));
   const sensorDevices = assignedDevices.filter((d) => d.device_type.includes("SENSOR"));
@@ -253,7 +256,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
               <div key={`${s.device_uid}-${s.created_at}`} style={cardStyle}>
                 {(() => {
                   const device = assignedDevices.find((d) => d.device_uid === s.device_uid);
-                  const isActive = device?.status === "active";
+                  const isActive = isDeviceEnabled(device?.status);
                   const acceptsData = device?.accepts_data !== false;
                   const acceptsDataLabel = acceptsData ? "Принимаем данные" : "Не принимаем данные";
                   const onlineStatus = getOnlineStatus(s.device_uid, device?.device_type || s.sensor_type || "");
@@ -403,7 +406,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                     </div>
                   )}
                   <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-                    {"Статус: "}{d.status === "active" ? "ожидание первых данных" : "Датчик не активен"}
+                    {"Статус: "}{isDeviceEnabled(d.status) ? "ожидание первых данных" : "Датчик выключен"}
                   </div>
                 </div>
                   );
@@ -452,7 +455,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                 <div key={a.device_uid} style={cardStyle}>
                   {(() => {
                     const device = assignedDevices.find((d) => d.device_uid === a.device_uid);
-                    const isActive = device?.status === "active";
+                    const isActive = isDeviceEnabled(device?.status);
                     const onlineStatus = getOnlineStatus(a.device_uid, device?.device_type || a.actuator_type || "");
                     const isAutoControlled = autoControlledActuatorUids.has(a.device_uid);
                     const isLinked = linkedActuatorUids.has(a.device_uid);
@@ -647,7 +650,7 @@ export function DashboardPage({ isAdmin }: DashboardPageProps) {
                         </div>
                       ) : (
                         <div style={{ marginTop: 4, fontSize: "0.95rem", fontWeight: 500 }}>
-                          Актуатор не активен
+                          Актуатор выключен
                         </div>
                       )}
                     </div>
