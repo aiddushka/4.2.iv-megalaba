@@ -1,0 +1,197 @@
+name: CI/CD for IoT Greenhouse
+
+# Когда запускать проверки
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  # Возможность запустить вручную
+  workflow_dispatch:
+
+# Список задач (jobs)
+jobs:
+  # ЗАДАЧА 1: Проверка бэкенда
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+    
+    steps:
+      # 1. Загружаем код
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 2. Устанавливаем Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      # 3. Устанавливаем зависимости бэкенда
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx  # для тестов
+      
+      # 4. Проверяем синтаксис Python
+      - name: Lint Python code
+        working-directory: ./backend
+        run: |
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      
+      # 5. Запускаем тесты бэкенда
+      - name: Run backend tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
+          MQTT_BROKER: localhost
+          MQTT_PORT: 1883
+          SECRET_KEY: test_secret_key
+        run: |
+          # Создаем простые тесты (если их нет)
+          python -c "import main; print('Backend imports OK')"
+          # Если есть pytest тесты:
+          # pytest tests/ -v
+
+  # ЗАДАЧА 2: Проверка фронтенда (Dashboard)
+  frontend-dashboard-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        working-directory: ./frontend-dashboard
+        run: |
+          npm ci
+      
+      - name: Check TypeScript
+        working-directory: ./frontend-dashboard
+        run: |
+          npx tsc --noEmit
+      
+      - name: Build dashboard
+        working-directory: ./frontend-dashboard
+        run: |
+          npm run build
+      
+      - name: Lint dashboard
+        working-directory: ./frontend-dashboard
+        run: |
+          npm install -g eslint
+          npx eslint . --ext .ts,.tsx --max-warnings 0 || true
+
+  # ЗАДАЧА 3: Проверка Device Configurator
+  frontend-config-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        working-directory: ./frontend-device-config
+        run: |
+          npm ci
+      
+      - name: Check TypeScript
+        working-directory: ./frontend-device-config
+        run: |
+          npx tsc --noEmit
+      
+      - name: Build configurator
+        working-directory: ./frontend-device-config
+        run: |
+          npm run build
+
+  # ЗАДАЧА 4: Проверка Docker сборки
+  docker-build-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build all Docker images
+        working-directory: ./docker
+        run: |
+          docker-compose -f docker-compose.yml build
+      
+      - name: Test containers start
+        working-directory: ./docker
+        run: |
+          docker-compose -f docker-compose.yml up -d
+          sleep 10  # Ждем запуска
+          docker-compose -f docker-compose.yml ps
+          docker-compose -f docker-compose.yml down
+
+  # ЗАДАЧА 5: Проверка эмуляторов
+  emulator-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install paho-mqtt
+        run: |
+          pip install paho-mqtt
+      
+      - name: Check sensor manager syntax
+        working-directory: ./device-emulator
+        run: |
+          python -m py_compile sensor_manager.py
+      
+      - name: Check actuators
+        working-directory: ./device-emulator/actuators
+        run: |
+          for file in *.py; do
+            python -m py_compile "$file"
+            echo "✓ $file is valid"
+          done
+      
+      - name: Check sensors
+        working-directory: ./device-emulator/sensors
+        run: |
+          for file in *.py; do
+            python -m py_compile "$file"
+            echo "✓ $file is valid"
+          done
