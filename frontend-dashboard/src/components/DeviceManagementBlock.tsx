@@ -11,6 +11,7 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
   const [acceptsData, setAcceptsData] = useState(
     device.accepts_data === undefined ? true : Boolean(device.accepts_data),
   );
+  const isActuator = String(device.device_type || "").toUpperCase().includes("ACTUATOR");
   const [location, setLocation] = useState(device.location || "");
   const [lastMaintenance, setLastMaintenance] = useState(
     device.last_maintenance ? device.last_maintenance.slice(0, 10) : "",
@@ -32,7 +33,7 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
     try {
       await updateDeviceConfig(device.device_uid, {
         location,
-        accepts_data: isAdmin ? acceptsData : undefined,
+        accepts_data: !isActuator && isAdmin ? acceptsData : undefined,
         last_maintenance: isAdmin && lastMaintenance ? new Date(lastMaintenance).toISOString() : undefined,
         maintenance_notes: isAdmin ? maintenanceNotes : undefined,
       });
@@ -48,20 +49,22 @@ export function DeviceManagementBlock({ device, isAdmin, onSaved }: Props) {
   return (
     <div style={{ border: "1px solid #1f2937", borderRadius: 12, background: "#020617", padding: "1rem" }}>
       <h4 style={{ margin: "0 0 0.75rem 0", color: "#22c55e" }}>Управление устройством</h4>
-      <div style={{ marginBottom: 8 }}>
-        <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 4 }}>
-          Принимаем данные
-        </label>
-        <select
-          value={acceptsData ? "yes" : "no"}
-          onChange={(e) => setAcceptsData(e.target.value === "yes")}
-          disabled={!isAdmin}
-          style={{ width: "100%", padding: "0.5rem", background: "#0f172a", border: "1px solid #1f2937", borderRadius: 8, color: "#e5e7eb" }}
-        >
-          <option value="yes">Принимаем данные</option>
-          <option value="no">Не принимаем данные</option>
-        </select>
-      </div>
+      {!isActuator && (
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 4 }}>
+            Статус
+          </label>
+          <select
+            value={acceptsData ? "yes" : "no"}
+            onChange={(e) => setAcceptsData(e.target.value === "yes")}
+            disabled={!isAdmin}
+            style={{ width: "100%", padding: "0.5rem", background: "#0f172a", border: "1px solid #1f2937", borderRadius: 8, color: "#e5e7eb" }}
+          >
+            <option value="yes">Принимаем данные</option>
+            <option value="no">Не принимаем данные</option>
+          </select>
+        </div>
+      )}
       <div style={{ marginBottom: 8 }}>
         <label style={{ display: "block", fontSize: "0.8rem", color: "#9ca3af", marginBottom: 4 }}>
           Место установки
