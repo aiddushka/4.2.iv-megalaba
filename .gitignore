@@ -15,5 +15,5 @@ node_modules/
 .DS_Store
 
 *.log
-
+device-emulator/state.json
 postgres_data
