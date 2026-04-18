@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import time
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -20,9 +22,37 @@ MQTT_ACTUATOR_STATE_TOPIC = os.getenv(
 MQTT_HEARTBEAT_TOPIC = os.getenv("MQTT_HEARTBEAT_TOPIC", "greenhouse/devices/+/heartbeat")
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "greenhouse-backend")
 DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
+_DEVICE_TOKEN_REJECT_LOG_INTERVAL = float(
+    os.getenv("MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL", "30")
+)
 
 _client: mqtt.Client | None = None
 _heartbeats: dict[str, dict[str, Any]] = {}
+_reject_lock = threading.Lock()
+_device_token_reject_totals: dict[str, int] = {"sensor": 0, "actuator": 0, "heartbeat": 0}
+_device_token_reject_last_log_mono = 0.0
+
+
+def get_device_token_reject_totals() -> dict[str, int]:
+    with _reject_lock:
+        return dict(_device_token_reject_totals)
+
+
+def _record_invalid_device_token(kind: str, device_uid: str | None) -> None:
+    """Count failed verification; log at most once per interval (no token values logged)."""
+    global _device_token_reject_last_log_mono
+    uid = device_uid or "unknown"
+    with _reject_lock:
+        _device_token_reject_totals[kind] = _device_token_reject_totals.get(kind, 0) + 1
+        now = time.monotonic()
+        if now - _device_token_reject_last_log_mono < _DEVICE_TOKEN_REJECT_LOG_INTERVAL:
+            return
+        _device_token_reject_last_log_mono = now
+        totals = dict(_device_token_reject_totals)
+    print(
+        f"[mqtt] device_token verification failed: kind={kind} device_uid={uid!r} "
+        f"totals_since_startup={totals}"
+    )
 
 
 def _decode_payload(payload_raw: bytes) -> dict[str, Any] | None:
@@ -57,6 +87,7 @@ def _handle_sensor_payload(payload_dict: dict[str, Any]) -> None:
         token = payload_dict.get("device_token")
         device = db.query(Device).filter(Device.device_uid == payload.device_uid).first()
         if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            _record_invalid_device_token("sensor", payload.device_uid)
             return
         if device is not None and hasattr(device, "accepts_data") and not bool(device.accepts_data):
             return
@@ -78,6 +109,7 @@ def _handle_actuator_state(payload_dict: dict[str, Any]) -> None:
         token = payload_dict.get("device_token")
         device = db.query(Device).filter(Device.device_uid == device_uid).first()
         if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            _record_invalid_device_token("actuator", str(device_uid))
             return
         actuator_service.set_actuator_state(
             db=db, device_uid=device_uid, action=state, actuator_type=actuator_type
@@ -99,6 +131,7 @@ def _handle_heartbeat(topic: str, payload_dict: dict[str, Any]) -> None:
         token = payload_dict.get("device_token")
         device = db.query(Device).filter(Device.device_uid == device_uid).first()
         if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            _record_invalid_device_token("heartbeat", device_uid)
             return
         _heartbeats[device_uid] = payload_dict
     finally:
