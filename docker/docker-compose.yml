@@ -55,6 +55,8 @@ services:
       # - SQL_ECHO=true
       - MQTT_BROKER_HOST=mqtt-broker
       - MQTT_BROKER_PORT=1883
+      - MANAGER_KEY=dev-manager-key
+      - DEVICE_TOKEN_PEPPER=dev-pepper
     volumes:
       - ../backend:/app
     networks:
@@ -105,6 +107,7 @@ services:
       - BACKEND_URL=http://backend:8000
       - MQTT_BROKER_HOST=mqtt-broker
       - MQTT_BROKER_PORT=1883
+      - MANAGER_KEY=dev-manager-key
       - POLL_INTERVAL_SECONDS=5
       - HEALTHCHECK_INTERVAL_SECONDS=10
       - STATE_FILE_PATH=/state/state.json

@@ -9,6 +9,7 @@ from app.services import actuator_service
 from app.schemas.sensor_schema import SensorDataCreate
 from app.services import sensor_service
 from app.models.device import Device
+from app.services import device_token_service
 
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
@@ -18,6 +19,7 @@ MQTT_ACTUATOR_STATE_TOPIC = os.getenv(
 )
 MQTT_HEARTBEAT_TOPIC = os.getenv("MQTT_HEARTBEAT_TOPIC", "greenhouse/devices/+/heartbeat")
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "greenhouse-backend")
+DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
 
 _client: mqtt.Client | None = None
 _heartbeats: dict[str, dict[str, Any]] = {}
@@ -52,9 +54,11 @@ def _handle_sensor_payload(payload_dict: dict[str, Any]) -> None:
 
     db = SessionLocal()
     try:
+        token = payload_dict.get("device_token")
         device = db.query(Device).filter(Device.device_uid == payload.device_uid).first()
+        if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            return
         if device is not None and hasattr(device, "accepts_data") and not bool(device.accepts_data):
-            # Устройство продолжает отправлять данные, но бекенд их не обрабатывает.
             return
         sensor_service.ingest_sensor_data(db, payload)
     except Exception as exc:
@@ -71,6 +75,10 @@ def _handle_actuator_state(payload_dict: dict[str, Any]) -> None:
         return
     db = SessionLocal()
     try:
+        token = payload_dict.get("device_token")
+        device = db.query(Device).filter(Device.device_uid == device_uid).first()
+        if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            return
         actuator_service.set_actuator_state(
             db=db, device_uid=device_uid, action=state, actuator_type=actuator_type
         )
@@ -86,7 +94,15 @@ def _handle_heartbeat(topic: str, payload_dict: dict[str, Any]) -> None:
     if len(parts) < 4:
         return
     device_uid = parts[2]
-    _heartbeats[device_uid] = payload_dict
+    db = SessionLocal()
+    try:
+        token = payload_dict.get("device_token")
+        device = db.query(Device).filter(Device.device_uid == device_uid).first()
+        if not device_token_service.verify_device_token(device, token, DEVICE_TOKEN_PEPPER):
+            return
+        _heartbeats[device_uid] = payload_dict
+    finally:
+        db.close()
 
 
 def _on_message(_client: mqtt.Client, _userdata, message: mqtt.MQTTMessage):

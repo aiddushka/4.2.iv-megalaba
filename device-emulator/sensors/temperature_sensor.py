@@ -5,6 +5,7 @@ import json
 import paho.mqtt.client as mqtt
 
 DEVICE_UID = os.getenv("DEVICE_UID", "temp_sensor_1")
+DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
 SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 0.15
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
@@ -27,12 +28,18 @@ while True:
             "device_uid": DEVICE_UID,
             "device_type": "TEMP_SENSOR",
             "status": "alive",
+            "device_token": DEVICE_TOKEN,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         mqtt_client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
         last_heartbeat_at = now
     temp = max(10.0, min(45.0, temp + random.uniform(-NATURAL_DRIFT, NATURAL_DRIFT)))
-    payload = {"device_uid": DEVICE_UID, "value": round(temp, 2), "sensor_type": "temperature"}
+    payload = {
+        "device_uid": DEVICE_UID,
+        "device_token": DEVICE_TOKEN,
+        "value": round(temp, 2),
+        "sensor_type": "temperature",
+    }
     try:
         mqtt_client.publish(MQTT_TOPIC, json.dumps(payload), qos=1)
         print(f"Published: {payload['value']}°C Topic: {MQTT_TOPIC}")

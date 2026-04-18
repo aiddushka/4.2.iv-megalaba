@@ -5,6 +5,7 @@ import json
 import paho.mqtt.client as mqtt
 
 DEVICE_UID = os.getenv("DEVICE_UID", "humidity_soil_sensor_1")
+DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
 SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 0.8
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
@@ -27,6 +28,7 @@ if __name__ == "__main__":
                 "device_uid": DEVICE_UID,
                 "device_type": "HUMIDITY_SOIL_SENSOR",
                 "status": "alive",
+                "device_token": DEVICE_TOKEN,
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             mqtt_client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
@@ -35,7 +37,12 @@ if __name__ == "__main__":
             5.0,
             min(95.0, soil_moisture + random.uniform(-NATURAL_DRIFT, NATURAL_DRIFT)),
         )
-        payload = {"device_uid": DEVICE_UID, "value": round(soil_moisture, 2), "sensor_type": "humidity_soil"}
+        payload = {
+            "device_uid": DEVICE_UID,
+            "device_token": DEVICE_TOKEN,
+            "value": round(soil_moisture, 2),
+            "sensor_type": "humidity_soil",
+        }
         try:
             mqtt_client.publish(MQTT_TOPIC, json.dumps(payload), qos=1)
             print(f"Published soil moisture: {payload['value']}% Topic: {MQTT_TOPIC}")

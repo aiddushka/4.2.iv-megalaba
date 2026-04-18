@@ -11,7 +11,7 @@ from docker.errors import APIError, NotFound
 
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-ORCHESTRATION_STATE_URL = f"{BACKEND_URL}/devices/orchestration-state"
+ORCHESTRATION_STATE_URL = f"{BACKEND_URL}/devices/internal/orchestration-state"
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "10"))
 STATE_FILE_PATH = Path(os.getenv("STATE_FILE_PATH", "/app/state.json"))
@@ -26,6 +26,7 @@ AUTO_RESTART_MAX_RETRIES = int(os.getenv("AUTO_RESTART_MAX_RETRIES", "5"))
 STOP_TIMEOUT_SECONDS = int(os.getenv("STOP_TIMEOUT_SECONDS", "10"))
 DEVICE_GROUP_PROJECT = os.getenv("DEVICE_GROUP_PROJECT", "devices")
 DEVICE_GROUP_SERVICE = os.getenv("DEVICE_GROUP_SERVICE", "device-runtime")
+MANAGER_KEY = os.getenv("MANAGER_KEY", "")
 
 SENSOR_SCRIPT_BY_DEVICE_TYPE = {
     "TEMP_SENSOR": "sensors/temperature_sensor.py",
@@ -114,7 +115,8 @@ def _save_state(state: dict) -> None:
 
 def _fetch_orchestration_state() -> list[dict] | None:
     try:
-        response = requests.get(ORCHESTRATION_STATE_URL, timeout=5)
+        headers = {"X-Manager-Key": MANAGER_KEY} if MANAGER_KEY else {}
+        response = requests.get(ORCHESTRATION_STATE_URL, timeout=5, headers=headers)
         response.raise_for_status()
         data = response.json()
         if isinstance(data, list):
@@ -163,6 +165,7 @@ def _ensure_created(
     state: dict,
     device_uid: str,
     device_type: str,
+    device_token: str | None,
 ):
     devices_state = state["devices"]
     info = devices_state.setdefault(device_uid, {})
@@ -174,11 +177,13 @@ def _ensure_created(
         command = _device_command(device_type)
         env = {
             "DEVICE_UID": device_uid,
+            "DEVICE_TOKEN": device_token,
             "BACKEND_URL": BACKEND_URL,
             "MQTT_BROKER_HOST": MQTT_BROKER_HOST,
             "MQTT_BROKER_PORT": str(MQTT_BROKER_PORT),
             "ACTUATOR_TYPE": device_type,
         }
+        env = {k: v for k, v in env.items() if v is not None}
         container = client.containers.create(
             image=DEVICE_IMAGE,
             name=container_name,
@@ -248,6 +253,7 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
     device_uid = desired.get("device_uid")
     device_type = desired.get("device_type")
     desired_runtime_state = desired.get("desired_runtime_state", "stopped")
+    device_token = desired.get("device_token")
     if not device_uid or not device_type:
         return
 
@@ -255,7 +261,7 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
         _ensure_removed(client, state, device_uid)
         return
 
-    container, info = _ensure_created(client, network, state, device_uid, device_type)
+    container, info = _ensure_created(client, network, state, device_uid, device_type, device_token)
     info["desired_runtime_state"] = desired_runtime_state
     info["status"] = desired.get("status", info.get("status"))
 

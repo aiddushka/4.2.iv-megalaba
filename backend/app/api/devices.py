@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
@@ -6,8 +6,14 @@ from app.database.session import SessionLocal
 from app.models.device import Device
 from app.models.user import User
 from app.models.device_link import DeviceLink
-from app.schemas.device_schema import DeviceAssign, DeviceCreate, DeviceOut, DeviceUpdate
-from app.services import device_service, mqtt_service
+from app.schemas.device_schema import (
+    DeviceAssign,
+    DeviceCreate,
+    DeviceOut,
+    DeviceRegisteredOut,
+    DeviceUpdate,
+)
+from app.services import device_service, device_token_service, mqtt_service
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -19,9 +25,10 @@ def get_db():
         db.close()
 
 
-@router.post("/register", response_model=DeviceOut)
+@router.post("/register", response_model=DeviceRegisteredOut)
 def register_device(
     payload: DeviceCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Регистрация устройства без авторизации (сайт-конфигуратор с ноутбука/флешки у устройства)."""
@@ -37,7 +44,76 @@ def register_device(
         bus_address=payload.bus_address,
         components=payload.components,
     )
-    return device
+    pepper = getattr(request.app.state, "device_token_pepper", "dev-pepper")
+    token = device_token_service.generate_device_token()
+    device_token_service.set_device_token(db=db, device=device, token=token, pepper=pepper)
+    # Return token only once (registration response).
+    return {**DeviceOut.from_orm(device).dict(), "device_token": token}
+
+
+def _require_manager_key(request: Request) -> None:
+    expected = getattr(request.app.state, "manager_key", "") or ""
+    provided = (request.headers.get("x-manager-key") or "").strip()
+    if not expected or not provided or provided != expected:
+        raise HTTPException(status_code=403, detail="Manager key required")
+
+
+@router.get("/internal/orchestration-state")
+def get_orchestration_state_internal(request: Request, db: Session = Depends(get_db)):
+    """
+    INTERNAL endpoint for sensor-emulator-manager.
+    Same as /devices/orchestration-state, but includes per-device token for runtime.
+    Protected by X-Manager-Key header.
+    """
+    _require_manager_key(request)
+    devices = device_service.get_all_devices(db)
+    # Note: internal endpoint returns raw device_token for runtime injection.
+    # In production you'd use TLS + broker auth or encrypted secrets; for lab we store token in DB.
+    rows: list[dict] = []
+    for d in devices:
+        rows.append(
+            {
+                "device_uid": d.device_uid,
+                "device_type": d.device_type,
+                "status": d.status,
+                "desired_runtime_state": "stopped" if d.status == "disabled" else "running",
+                "device_token": getattr(d, "device_token", None),
+            }
+        )
+    return rows
+
+
+@router.post("/token/rotate/{device_uid}")
+def rotate_device_token(
+    device_uid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    pepper = getattr(request.app.state, "device_token_pepper", "dev-pepper")
+    token = device_token_service.generate_device_token()
+    device_token_service.set_device_token(db=db, device=device, token=token, pepper=pepper)
+    return {"ok": True, "device_uid": device_uid, "device_token": token, "version": device.device_token_version}
+
+
+@router.post("/token/revoke/{device_uid}")
+def revoke_device_token(
+    device_uid: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    device_token_service.revoke_device_token(db=db, device=device)
+    return {"ok": True, "device_uid": device_uid}
 
 
 @router.get("/unassigned", response_model=list[DeviceOut])
@@ -250,10 +326,16 @@ def set_device_runtime_public(
     if not existing:
         raise HTTPException(status_code=404, detail="Device not found")
 
+    # Registration on 3001 creates device with status=unassigned. Enabling should not move it to active
+    # (otherwise it disappears from /unassigned dashboard page).
+    next_status = status_value
+    if status_value == "active" and existing.status == "disabled":
+        next_status = "unassigned"
+
     device = device_service.update_device(
         db=db,
         device_uid=device_uid,
-        status=status_value,
+        status=next_status,
         changed_by="public-configurator",
     )
     if not device:

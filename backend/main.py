@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from pathlib import Path
+import os
 
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
@@ -39,6 +40,26 @@ def create_app() -> FastAPI:
             conn.execute(
                 text(
                     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS accepts_data BOOLEAN NOT NULL DEFAULT TRUE"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_hash VARCHAR(128)"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token VARCHAR(128)"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_version INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_revoked_at TIMESTAMP"
                 )
             )
             conn.execute(
@@ -118,6 +139,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Service-to-service key for sensor-emulator-manager internal calls (e.g. runtime secrets).
+    app.state.manager_key = os.getenv("MANAGER_KEY", "")
+    app.state.device_token_pepper = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
 
     # подключаем все роутеры
     app.include_router(auth.router)

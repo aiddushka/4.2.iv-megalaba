@@ -39,6 +39,10 @@ class DeviceOut(DeviceBase):
         orm_mode = True
 
 
+class DeviceRegisteredOut(DeviceOut):
+    device_token: str
+
+
 class DeviceAssign(BaseModel):
     device_uid: str
     location: str

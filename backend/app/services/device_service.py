@@ -27,9 +27,7 @@ def register_device(
         bus_address=bus_address,
         components=components,
         location=location_hint,
-        # После регистрации устройство сразу считается установленным и видимым на Dashboard.
-        # Контейнер/эмулятор поднимется менеджером через orchestration-state.
-        status="active",
+        status="unassigned",
     )
     db.add(device)
     db.commit()

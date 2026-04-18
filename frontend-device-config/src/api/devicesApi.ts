@@ -12,8 +12,17 @@ export interface RegisterDevicePayload {
   components?: string[];
 }
 
+export interface RegisteredDeviceResponse {
+  id: number;
+  device_uid: string;
+  device_type: string;
+  status: string;
+  accepts_data: boolean;
+  device_token: string;
+}
+
 export async function registerDevice(payload: RegisterDevicePayload) {
-  const { data } = await apiClient.post("/devices/register", payload);
+  const { data } = await apiClient.post<RegisteredDeviceResponse>("/devices/register", payload);
   return data;
 }
 
