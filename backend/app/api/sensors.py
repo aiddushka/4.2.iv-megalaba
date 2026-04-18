@@ -26,6 +26,8 @@ def create_sensor_data(payload: SensorDataCreate, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.get("/", response_model=list[SensorDataOut])
