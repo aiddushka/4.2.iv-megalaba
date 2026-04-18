@@ -78,6 +78,7 @@ def get_orchestration_state_internal(request: Request, db: Session = Depends(get
                 "status": d.status,
                 "desired_runtime_state": "stopped" if d.status == "disabled" else "running",
                 "device_token": getattr(d, "device_token", None),
+                "device_token_version": int(getattr(d, "device_token_version", 1) or 1),
             }
         )
     return rows

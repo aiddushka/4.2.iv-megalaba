@@ -8,6 +8,7 @@ from pathlib import Path
 import docker
 import requests
 from docker.errors import APIError, NotFound
+from docker.types import Mount
 
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
@@ -27,6 +28,8 @@ STOP_TIMEOUT_SECONDS = int(os.getenv("STOP_TIMEOUT_SECONDS", "10"))
 DEVICE_GROUP_PROJECT = os.getenv("DEVICE_GROUP_PROJECT", "devices")
 DEVICE_GROUP_SERVICE = os.getenv("DEVICE_GROUP_SERVICE", "device-runtime")
 MANAGER_KEY = os.getenv("MANAGER_KEY", "")
+RUNTIME_SECRETS_DIR = os.getenv("RUNTIME_SECRETS_DIR", "").strip()
+DEVICE_RUNTIME_SECRETS_VOLUME = os.getenv("DEVICE_RUNTIME_SECRETS_VOLUME", "").strip()
 
 SENSOR_SCRIPT_BY_DEVICE_TYPE = {
     "TEMP_SENSOR": "sensors/temperature_sensor.py",
@@ -62,6 +65,34 @@ def _is_sensor(device_type: str) -> bool:
 def _container_name(device_uid: str) -> str:
     safe_uid = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
     return f"greenhouse_device_{safe_uid}".lower()
+
+
+def _device_secret_basename(device_uid: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
+
+
+def _sync_runtime_secret_file(
+    device_uid: str,
+    device_token: str | None,
+    device_token_version: int | None,
+    info: dict,
+) -> None:
+    if not RUNTIME_SECRETS_DIR:
+        return
+    ver = int(device_token_version if device_token_version is not None else 0)
+    tok = device_token if device_token is not None else ""
+    if info.get("synced_device_token_version") == ver and info.get("synced_device_token") == tok:
+        return
+    base = Path(RUNTIME_SECRETS_DIR)
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{_device_secret_basename(device_uid)}.json"
+    tmp = path.parent / f"{path.name}.tmp"
+    payload = {"device_token": tok, "device_token_version": ver}
+    tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+    tmp.replace(path)
+    info["synced_device_token_version"] = ver
+    info["synced_device_token"] = tok
+    print(f"[manager] runtime secret file updated for {device_uid} version={ver}")
 
 
 def _device_labels(device_uid: str, device_type: str) -> dict[str, str]:
@@ -182,16 +213,30 @@ def _ensure_created(
             "MQTT_BROKER_HOST": MQTT_BROKER_HOST,
             "MQTT_BROKER_PORT": str(MQTT_BROKER_PORT),
             "ACTUATOR_TYPE": device_type,
+            "RUNTIME_SECRETS_DIR": "/runtime-secrets",
         }
         env = {k: v for k, v in env.items() if v is not None}
-        container = client.containers.create(
-            image=DEVICE_IMAGE,
-            name=container_name,
-            command=["sh", "-c", command],
-            detach=True,
-            environment=env,
-            labels=_device_labels(device_uid=device_uid, device_type=device_type),
-        )
+        mounts = []
+        if DEVICE_RUNTIME_SECRETS_VOLUME:
+            mounts.append(
+                Mount(
+                    target="/runtime-secrets",
+                    source=DEVICE_RUNTIME_SECRETS_VOLUME,
+                    type="volume",
+                    read_only=True,
+                )
+            )
+        create_kw: dict = {
+            "image": DEVICE_IMAGE,
+            "name": container_name,
+            "command": ["sh", "-c", command],
+            "detach": True,
+            "environment": env,
+            "labels": _device_labels(device_uid=device_uid, device_type=device_type),
+        }
+        if mounts:
+            create_kw["mounts"] = mounts
+        container = client.containers.create(**create_kw)
         network.connect(container, ipv4_address=assigned_ip)
         print(f"[manager] created container {container_name} for {device_uid} ip={assigned_ip}")
 
@@ -247,6 +292,13 @@ def _ensure_removed(client: docker.DockerClient, state: dict, device_uid: str) -
         container.remove(force=True)
         print(f"[manager] removed container {container_name} ({device_uid})")
     state["devices"].pop(device_uid, None)
+    if RUNTIME_SECRETS_DIR:
+        try:
+            secret = Path(RUNTIME_SECRETS_DIR) / f"{_device_secret_basename(device_uid)}.json"
+            if secret.is_file():
+                secret.unlink()
+        except OSError:
+            pass
 
 
 def _reconcile_device(client: docker.DockerClient, network, state: dict, desired: dict) -> None:
@@ -254,6 +306,7 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
     device_type = desired.get("device_type")
     desired_runtime_state = desired.get("desired_runtime_state", "stopped")
     device_token = desired.get("device_token")
+    device_token_version = desired.get("device_token_version")
     if not device_uid or not device_type:
         return
 
@@ -262,6 +315,7 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
         return
 
     container, info = _ensure_created(client, network, state, device_uid, device_type, device_token)
+    _sync_runtime_secret_file(device_uid, device_token, device_token_version, info)
     info["desired_runtime_state"] = desired_runtime_state
     info["status"] = desired.get("status", info.get("status"))
 

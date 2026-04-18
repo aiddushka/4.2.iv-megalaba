@@ -4,8 +4,10 @@ import os
 import json
 import paho.mqtt.client as mqtt
 
+from runtime_token import DeviceTokenHolder
+
 DEVICE_UID = os.getenv("DEVICE_UID", "light_sensor_1")
-DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
+_token_holder = DeviceTokenHolder(DEVICE_UID, os.getenv("DEVICE_TOKEN", ""))
 SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 4.0
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
@@ -28,7 +30,7 @@ if __name__ == "__main__":
                 "device_uid": DEVICE_UID,
                 "device_type": "LIGHT_SENSOR",
                 "status": "alive",
-                "device_token": DEVICE_TOKEN,
+                "device_token": _token_holder.current(),
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             mqtt_client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
@@ -37,7 +39,7 @@ if __name__ == "__main__":
         light_level = max(10.0, min(1200.0, light_level + random.uniform(-NATURAL_DRIFT, NATURAL_DRIFT)))
         payload = {
             "device_uid": DEVICE_UID,
-            "device_token": DEVICE_TOKEN,
+            "device_token": _token_holder.current(),
             "value": round(light_level, 2),
             "sensor_type": "light",
         }

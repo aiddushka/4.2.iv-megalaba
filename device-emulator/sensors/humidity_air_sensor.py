@@ -4,8 +4,10 @@ import os
 import json
 import paho.mqtt.client as mqtt
 
+from runtime_token import DeviceTokenHolder
+
 DEVICE_UID = os.getenv("DEVICE_UID", "humidity_air_sensor_1")
-DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
+_token_holder = DeviceTokenHolder(DEVICE_UID, os.getenv("DEVICE_TOKEN", ""))
 SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 0.6
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
@@ -28,7 +30,7 @@ if __name__ == "__main__":
                 "device_uid": DEVICE_UID,
                 "device_type": "HUMIDITY_AIR_SENSOR",
                 "status": "alive",
-                "device_token": DEVICE_TOKEN,
+                "device_token": _token_holder.current(),
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             mqtt_client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
@@ -36,7 +38,7 @@ if __name__ == "__main__":
         humidity = max(15.0, min(95.0, humidity + random.uniform(-NATURAL_DRIFT, NATURAL_DRIFT)))
         payload = {
             "device_uid": DEVICE_UID,
-            "device_token": DEVICE_TOKEN,
+            "device_token": _token_holder.current(),
             "value": round(humidity, 2),
             "sensor_type": "humidity_air",
         }

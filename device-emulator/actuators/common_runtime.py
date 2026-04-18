@@ -4,8 +4,10 @@ import time
 
 import paho.mqtt.client as mqtt
 
+from runtime_token import DeviceTokenHolder
+
 DEVICE_UID = os.getenv("DEVICE_UID", "actuator_1")
-DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
+_token_holder = DeviceTokenHolder(DEVICE_UID, os.getenv("DEVICE_TOKEN", ""))
 ACTUATOR_TYPE = os.getenv("ACTUATOR_TYPE", "UNKNOWN_ACTUATOR")
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
@@ -41,7 +43,7 @@ def run_actuator_listener(default_state: str = "OFF") -> None:
         current_state = action
         state_payload = {
             "device_uid": DEVICE_UID,
-            "device_token": DEVICE_TOKEN,
+            "device_token": _token_holder.current(),
             "actuator_type": ACTUATOR_TYPE,
             "state": current_state,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -59,7 +61,7 @@ def run_actuator_listener(default_state: str = "OFF") -> None:
         if now - last_heartbeat_at >= HEARTBEAT_INTERVAL_SECONDS:
             heartbeat_payload = {
                 "device_uid": DEVICE_UID,
-                "device_token": DEVICE_TOKEN,
+                "device_token": _token_holder.current(),
                 "device_type": ACTUATOR_TYPE,
                 "status": "alive",
                 "state": current_state,

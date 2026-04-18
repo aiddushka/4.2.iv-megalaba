@@ -111,6 +111,8 @@ services:
       - POLL_INTERVAL_SECONDS=5
       - HEALTHCHECK_INTERVAL_SECONDS=10
       - STATE_FILE_PATH=/state/state.json
+      - RUNTIME_SECRETS_DIR=/runtime-secrets
+      - DEVICE_RUNTIME_SECRETS_VOLUME=greenhouse_device_runtime_secrets
       - DEVICE_NETWORK_NAME=greenhouse_iot_net
       - DEVICE_IMAGE=docker-device-runtime
       - DEVICE_GROUP_PROJECT=devices
@@ -121,6 +123,7 @@ services:
       - STOP_TIMEOUT_SECONDS=10
     volumes:
       - ../device-emulator:/state
+      - device_runtime_secrets:/runtime-secrets
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - default
@@ -128,6 +131,7 @@ services:
 
 volumes:
   postgres_data:
+  device_runtime_secrets:
 
 networks:
   greenhouse_iot_net:
