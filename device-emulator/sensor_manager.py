@@ -3,6 +3,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -44,6 +45,7 @@ MQTT_CERTS_RW_DIR = os.getenv("MQTT_CERTS_RW_DIR", "/mqtt-certs-rw").strip()
 MQTT_DEVICE_CA_CERT_PATH = os.getenv("MQTT_DEVICE_CA_CERT_PATH", "/mosquitto-config-certs/device-ca.crt").strip()
 MQTT_DEVICE_CA_KEY_PATH = os.getenv("MQTT_DEVICE_CA_KEY_PATH", "/mosquitto-config-certs/device-ca.key").strip()
 MQTT_DEVICE_CERTS_SUBDIR = os.getenv("MQTT_DEVICE_CERTS_SUBDIR", "devices").strip() or "devices"
+MQTT_DEVICE_CRL_PATH = os.getenv("MQTT_DEVICE_CRL_PATH", "/mqtt-certs-rw/device-ca.crl").strip()
 
 SENSOR_SCRIPT_BY_DEVICE_TYPE = {
     "TEMP_SENSOR": "sensors/temperature_sensor.py",
@@ -96,19 +98,151 @@ def _sanitize_cert_cn(raw: str) -> str:
     return safe or "device"
 
 
+def _certs_base_dir() -> Path:
+    return Path(MQTT_CERTS_RW_DIR) / MQTT_DEVICE_CERTS_SUBDIR
+
+
+def _ca_db_dir() -> Path:
+    return Path(MQTT_CERTS_RW_DIR) / "ca-db"
+
+
+def _ca_config_path() -> Path:
+    return _ca_db_dir() / "openssl-ca.cnf"
+
+
+def _ensure_ca_db() -> Path:
+    base = _ca_db_dir()
+    certs_base = _certs_base_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    certs_base.mkdir(parents=True, exist_ok=True)
+    (base / "index.txt").touch(exist_ok=True)
+    if not (base / "serial").exists():
+        (base / "serial").write_text("1000\n", encoding="utf-8")
+    if not (base / "crlnumber").exists():
+        (base / "crlnumber").write_text("1000\n", encoding="utf-8")
+    cfg = _ca_config_path()
+    cfg.write_text(
+        (
+            "[ ca ]\n"
+            "default_ca = CA_default\n\n"
+            "[ CA_default ]\n"
+            f"dir = {base.as_posix()}\n"
+            f"database = {(base / 'index.txt').as_posix()}\n"
+            f"new_certs_dir = {certs_base.as_posix()}\n"
+            f"certificate = {Path(MQTT_DEVICE_CA_CERT_PATH).as_posix()}\n"
+            f"private_key = {Path(MQTT_DEVICE_CA_KEY_PATH).as_posix()}\n"
+            f"serial = {(base / 'serial').as_posix()}\n"
+            f"crlnumber = {(base / 'crlnumber').as_posix()}\n"
+            "default_md = sha256\n"
+            "default_days = 365\n"
+            "default_crl_days = 365\n"
+            "policy = policy_any\n"
+            "unique_subject = no\n"
+            "x509_extensions = usr_cert\n\n"
+            "[ policy_any ]\n"
+            "commonName = supplied\n\n"
+            "[ usr_cert ]\n"
+            "basicConstraints = CA:FALSE\n"
+            "keyUsage = digitalSignature,keyEncipherment\n"
+            "extendedKeyUsage = clientAuth\n"
+        ),
+        encoding="utf-8",
+    )
+    return cfg
+
+
+def _generate_crl() -> None:
+    cfg = _ensure_ca_db()
+    subprocess.run(
+        ["openssl", "ca", "-gencrl", "-config", str(cfg), "-out", MQTT_DEVICE_CRL_PATH],
+        check=True,
+    )
+
+
+def issue_device_mtls_material(device_uid: str) -> tuple[str, str]:
+    cfg = _ensure_ca_db()
+    certs_base = _certs_base_dir()
+    safe_uid = _device_secret_basename(device_uid)
+    cert_path = certs_base / f"{safe_uid}.crt"
+    key_path = certs_base / f"{safe_uid}.key"
+    csr_path = certs_base / f"{safe_uid}.csr"
+    subj = (
+        f"/C=RU/ST=Tyumen/L=Tyumen/O=Greenhouse Dev/OU=Devices/"
+        f"CN={_sanitize_cert_cn(device_uid)}"
+    )
+    subprocess.run(["openssl", "genrsa", "-out", str(key_path), "2048"], check=True)
+    subprocess.run(
+        ["openssl", "req", "-new", "-key", str(key_path), "-out", str(csr_path), "-subj", subj],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "openssl",
+            "ca",
+            "-batch",
+            "-config",
+            str(cfg),
+            "-in",
+            str(csr_path),
+            "-out",
+            str(cert_path),
+            "-notext",
+        ],
+        check=True,
+    )
+    try:
+        csr_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    _generate_crl()
+    return str(cert_path), str(key_path)
+
+
+def revoke_device_mtls_material(device_uid: str) -> bool:
+    cfg = _ensure_ca_db()
+    safe_uid = _device_secret_basename(device_uid)
+    cert_path = _certs_base_dir() / f"{safe_uid}.crt"
+    key_path = _certs_base_dir() / f"{safe_uid}.key"
+    revoked = False
+    if cert_path.is_file() and cert_path.stat().st_size > 0:
+        subprocess.run(
+            ["openssl", "ca", "-config", str(cfg), "-revoke", str(cert_path)],
+            check=True,
+        )
+        revoked = True
+    _generate_crl()
+    try:
+        cert_path.unlink(missing_ok=True)
+        key_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return revoked
+
+
+def rotate_device_mtls_material(device_uid: str) -> tuple[str, str]:
+    revoke_device_mtls_material(device_uid)
+    return issue_device_mtls_material(device_uid)
+
+
+def reload_mqtt_broker() -> None:
+    try:
+        docker.from_env().containers.get("greenhouse_mqtt_broker").kill(signal="HUP")
+        print("[cert] sent HUP to greenhouse_mqtt_broker for config/CRL reload")
+    except Exception as exc:
+        print(f"[cert] warning: failed to reload mqtt broker ({exc})")
+
+
 def _ensure_device_mtls_material(device_uid: str, info: dict) -> tuple[str | None, str | None]:
     if not MQTT_TLS_ENABLED:
         return None, None
     if not MQTT_CERTS_RW_DIR or not MQTT_DEVICE_CA_CERT_PATH or not MQTT_DEVICE_CA_KEY_PATH:
         raise RuntimeError("mTLS enabled but MQTT cert paths are not configured")
 
-    certs_base = Path(MQTT_CERTS_RW_DIR) / MQTT_DEVICE_CERTS_SUBDIR
+    certs_base = _certs_base_dir()
     certs_base.mkdir(parents=True, exist_ok=True)
     safe_uid = _device_secret_basename(device_uid)
     cert_path = certs_base / f"{safe_uid}.crt"
     key_path = certs_base / f"{safe_uid}.key"
-    csr_path = certs_base / f"{safe_uid}.csr"
-    serial_path = certs_base / "device-ca.srl"
 
     if (
         cert_path.is_file()
@@ -121,49 +255,14 @@ def _ensure_device_mtls_material(device_uid: str, info: dict) -> tuple[str | Non
         return str(cert_path), str(key_path)
     try:
         cert_path.unlink(missing_ok=True)
-        csr_path.unlink(missing_ok=True)
     except OSError:
         pass
 
-    subj = (
-        f"/C=RU/ST=Tyumen/L=Tyumen/O=Greenhouse Dev/OU=Devices/"
-        f"CN={_sanitize_cert_cn(device_uid)}"
-    )
-    subprocess.run(["openssl", "genrsa", "-out", str(key_path), "2048"], check=True)
-    subprocess.run(
-        ["openssl", "req", "-new", "-key", str(key_path), "-out", str(csr_path), "-subj", subj],
-        check=True,
-    )
-    sign_cmd = [
-        "openssl",
-        "x509",
-        "-req",
-        "-in",
-        str(csr_path),
-        "-CA",
-        MQTT_DEVICE_CA_CERT_PATH,
-        "-CAkey",
-        MQTT_DEVICE_CA_KEY_PATH,
-        "-out",
-        str(cert_path),
-        "-days",
-        "365",
-        "-sha256",
-        "-CAserial",
-        str(serial_path),
-    ]
-    if not serial_path.exists():
-        sign_cmd.append("-CAcreateserial")
-    subprocess.run(sign_cmd, check=True)
-    try:
-        csr_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
+    cert_path_s, key_path_s = issue_device_mtls_material(device_uid)
     info["mtls_cert_path"] = str(cert_path)
     info["mtls_key_path"] = str(key_path)
     print(f"[manager] generated per-device mTLS cert for {device_uid}")
-    return str(cert_path), str(key_path)
+    return cert_path_s, key_path_s
 
 
 def _sync_runtime_secret_file(
@@ -576,6 +675,24 @@ signal.signal(signal.SIGINT, _shutdown_handler)
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] in {"issue", "rotate", "revoke"}:
+        action = sys.argv[1]
+        uid = sys.argv[2]
+        if action == "issue":
+            cert, key = issue_device_mtls_material(uid)
+            reload_mqtt_broker()
+            print(json.dumps({"ok": True, "action": action, "device_uid": uid, "cert": cert, "key": key}))
+            raise SystemExit(0)
+        if action == "rotate":
+            cert, key = rotate_device_mtls_material(uid)
+            reload_mqtt_broker()
+            print(json.dumps({"ok": True, "action": action, "device_uid": uid, "cert": cert, "key": key}))
+            raise SystemExit(0)
+        revoked = revoke_device_mtls_material(uid)
+        reload_mqtt_broker()
+        print(json.dumps({"ok": True, "action": action, "device_uid": uid, "revoked": revoked}))
+        raise SystemExit(0)
+
     client = docker.from_env()
     network = client.networks.get(DEVICE_NETWORK_NAME)
     state = _load_state()
