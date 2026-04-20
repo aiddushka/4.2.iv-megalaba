@@ -6,9 +6,9 @@ req_extensions = req_ext
 distinguished_name = dn
 
 [ dn ]
-C = UA
-ST = Kyiv
-L = Kyiv
+C = RU
+ST = Tyumen
+L = Tyumen
 O = Greenhouse Dev
 OU = IoT
 CN = mqtt-broker
