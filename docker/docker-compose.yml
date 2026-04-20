@@ -14,6 +14,7 @@ services:
   mqtt-broker:
     image: eclipse-mosquitto:2
     container_name: greenhouse_mqtt_broker
+    user: "0:0"
     environment:
       - MQTT_USERNAME_BACKEND=${MQTT_USERNAME_BACKEND:-backend_user}
       - MQTT_PASSWORD_BACKEND=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
@@ -21,9 +22,12 @@ services:
       - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
     command: >
       sh -c "
+      rm -f /mosquitto/data/passwords &&
       mosquitto_passwd -b -c /mosquitto/data/passwords \"$${MQTT_USERNAME_BACKEND}\" \"$${MQTT_PASSWORD_BACKEND}\" &&
       mosquitto_passwd -b /mosquitto/data/passwords \"$${MQTT_USERNAME_DEVICE}\" \"$${MQTT_PASSWORD_DEVICE}\" &&
-      chmod 644 /mosquitto/data/passwords &&
+      cp /mosquitto/config/acl.conf /mosquitto/data/acl.conf &&
+      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf &&
+      chmod 0700 /mosquitto/data/passwords /mosquitto/data/acl.conf &&
       exec mosquitto -c /mosquitto/config/mosquitto.conf
       "
     ports:
