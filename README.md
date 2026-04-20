@@ -19,6 +19,7 @@
 - `docs/api-docs.md` — эндпоинты и примеры запросов
 - `docs/architecture.md` — архитектура и поток данных
 - `docs/sites.md` — страницы/модули фронтенда
+- `docs/tls.md` — перевыпуск MQTT TLS сертификатов (dev)
 
 ## Быстрый старт (Docker)
 
@@ -39,7 +40,7 @@ docker compose up --build
 Поднимутся контейнеры:
 
 - `greenhouse_postgres` — PostgreSQL (порт **5432**)
-- `greenhouse_mqtt_broker` — MQTT broker (порт **1883**)
+- `greenhouse_mqtt_broker` — MQTT broker (**TLS-only**, порт **8883**)
 - `greenhouse_backend` — FastAPI (порт **8000**)
 - `greenhouse_frontend_dashboard` — Vite dev server (наружу **3000**)
 - `greenhouse_frontend_device_config` — Vite dev server (наружу **3001**)
@@ -51,6 +52,28 @@ docker compose up --build
 - **Swagger**: `http://localhost:8000/docs`
 - **Dashboard**: `http://localhost:3000`
 - **Device Configurator**: `http://localhost:3001`
+
+## MQTT TLS (кратко)
+
+- Брокер принимает только TLS-подключения на порту `8883` (`1883` отключён).
+- Сертификаты Mosquitto лежат в `docker/mosquitto/certs/`.
+- Backend и device runtime доверяют CA через `MQTT_TLS_CA_CERT=.../ca.crt`.
+
+### Быстрая проверка TLS
+
+Из папки `docker/`:
+
+```bash
+docker compose ps
+docker compose logs mqtt-broker --tail=120
+docker compose logs backend --tail=120
+```
+
+Ожидаемо:
+
+- в логах broker есть `Opening ... port 8883` и нет `port 1883`;
+- в логах broker видно `Client ... negotiated TLSv1.3 ...`;
+- в логах backend видно `connecting to mqtt-broker:8883`.
 
 ### Учётные записи
 
