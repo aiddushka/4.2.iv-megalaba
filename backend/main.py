@@ -12,6 +12,11 @@ def _require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
 
+
+def _parse_csv_env(name: str, default: str) -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
@@ -141,9 +146,13 @@ def create_app() -> FastAPI:
     images_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
 
+    cors_origins = _parse_csv_env(
+        "CORS_ALLOW_ORIGINS",
+        "https://localhost:3000,https://localhost:3001,http://localhost:3000,http://localhost:3001",
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
