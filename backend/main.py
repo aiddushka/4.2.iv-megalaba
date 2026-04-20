@@ -122,10 +122,13 @@ def create_app() -> FastAPI:
     try:
         from app.database.session import SessionLocal
         from app.models.user import User
-        from app.services import auth_service
+        from app.services import auth_service, device_token_service
 
         db = SessionLocal()
         try:
+            migrated = device_token_service.migrate_plaintext_tokens_to_runtime_store(db)
+            if migrated:
+                print(f"[token] migrated {migrated} plaintext device tokens to runtime-token-store")
             bootstrap_enabled = os.getenv("BOOTSTRAP_ADMIN_ENABLED", "false").lower() == "true"
             bootstrap_user = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
             bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()

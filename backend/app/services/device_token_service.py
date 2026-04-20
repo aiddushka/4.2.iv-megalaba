@@ -13,6 +13,11 @@ from app.models.device import Device
 DEVICE_TOKEN_PLAINTEXT_MODE = os.getenv("DEVICE_TOKEN_PLAINTEXT_MODE", "legacy").strip().lower()
 RUNTIME_TOKEN_STORE_DIR = Path(os.getenv("RUNTIME_TOKEN_STORE_DIR", "/runtime-token-store")).resolve()
 _legacy_runtime_fallback_warned: set[str] = set()
+_ALLOWED_PLAINTEXT_MODES = {"legacy", "disabled"}
+if DEVICE_TOKEN_PLAINTEXT_MODE not in _ALLOWED_PLAINTEXT_MODES:
+    raise RuntimeError(
+        "DEVICE_TOKEN_PLAINTEXT_MODE must be one of: legacy, disabled"
+    )
 
 
 def generate_device_token() -> str:
@@ -78,6 +83,28 @@ def get_runtime_token_for_device(device: Device) -> tuple[str | None, int]:
             )
         return token_db, db_version
     return None, db_version
+
+
+def migrate_plaintext_tokens_to_runtime_store(db: Session) -> int:
+    """
+    One-time safety migration for disabled plaintext mode:
+    copy plaintext token from DB into runtime-token-store, then null DB plaintext.
+    """
+    if DEVICE_TOKEN_PLAINTEXT_MODE != "disabled":
+        return 0
+    changed = 0
+    devices = db.query(Device).all()
+    for device in devices:
+        plaintext = getattr(device, "device_token", None)
+        if not plaintext:
+            continue
+        version = int(getattr(device, "device_token_version", 1) or 1)
+        _persist_runtime_token(device.device_uid, plaintext, version)
+        device.device_token = None
+        changed += 1
+    if changed:
+        db.commit()
+    return changed
 
 
 def set_device_token(db: Session, device: Device, token: str, pepper: str) -> None:
