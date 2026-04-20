@@ -10,7 +10,9 @@ from app.schemas.sensor_schema import SensorDataCreate
 from app.services import actuator_service, automation_service, device_token_service
 
 TEMPERATURE_CONTROL_STEP = 0.45
-DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
+DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "").strip()
+if not DEVICE_TOKEN_PEPPER:
+    raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_PEPPER")
 RANDOM_BLEND_FACTOR = 0.2
 VENTILATION_HUMIDITY_AIR_STEP_ON = -1.0
 VENTILATION_HUMIDITY_AIR_STEP_OFF = 0.3

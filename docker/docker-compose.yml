@@ -24,16 +24,16 @@ services:
     image: postgres:15
     container_name: greenhouse_postgres
     environment:
-      POSTGRES_USER: greenhouse
-      POSTGRES_PASSWORD: greenhouse
-      POSTGRES_DB: greenhouse
+      POSTGRES_USER: ${POSTGRES_USER:-greenhouse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenhouse}
+      POSTGRES_DB: ${POSTGRES_DB:-greenhouse}
     ports:
       - "5432:5432"
     volumes:
       - ./database:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U greenhouse -d greenhouse"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-greenhouse} -d ${POSTGRES_DB:-greenhouse}"]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -53,10 +53,27 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       # - SQL_ECHO=true
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-      - MANAGER_KEY=dev-manager-key
-      - DEVICE_TOKEN_PEPPER=dev-pepper
+      - POSTGRES_USER=${POSTGRES_USER:-greenhouse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-greenhouse}
+      - POSTGRES_DB=${POSTGRES_DB:-greenhouse}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - SQL_ECHO=${SQL_ECHO:-false}
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-greenhouse-backend}
+      - MQTT_SENSOR_TOPIC=${MQTT_SENSOR_TOPIC:-greenhouse/sensors/+/data}
+      - MQTT_ACTUATOR_STATE_TOPIC=${MQTT_ACTUATOR_STATE_TOPIC:-greenhouse/actuators/+/state}
+      - MQTT_HEARTBEAT_TOPIC=${MQTT_HEARTBEAT_TOPIC:-greenhouse/devices/+/heartbeat}
+      - MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL=${MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL:-30}
+      - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
+      - DEVICE_TOKEN_PEPPER=${DEVICE_TOKEN_PEPPER:?DEVICE_TOKEN_PEPPER is required}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      - BOOTSTRAP_ADMIN_ENABLED=${BOOTSTRAP_ADMIN_ENABLED:-false}
+      - BOOTSTRAP_ADMIN_USERNAME=${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
     volumes:
       - ../backend:/app
     networks:
@@ -104,23 +121,23 @@ services:
       mqtt-broker:
         condition: service_started
     environment:
-      - BACKEND_URL=http://backend:8000
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-      - MANAGER_KEY=dev-manager-key
-      - POLL_INTERVAL_SECONDS=5
-      - HEALTHCHECK_INTERVAL_SECONDS=10
-      - STATE_FILE_PATH=/state/state.json
-      - RUNTIME_SECRETS_DIR=/runtime-secrets
-      - DEVICE_RUNTIME_SECRETS_VOLUME=greenhouse_device_runtime_secrets
-      - DEVICE_NETWORK_NAME=greenhouse_iot_net
-      - DEVICE_IMAGE=docker-device-runtime
-      - DEVICE_GROUP_PROJECT=devices
-      - DEVICE_GROUP_SERVICE=device-runtime
-      - SENSOR_IP_RANGE=172.28.1.10-172.28.1.250
-      - ACTUATOR_IP_RANGE=172.28.2.10-172.28.2.250
-      - AUTO_RESTART_MAX_RETRIES=5
-      - STOP_TIMEOUT_SECONDS=10
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-5}
+      - HEALTHCHECK_INTERVAL_SECONDS=${HEALTHCHECK_INTERVAL_SECONDS:-10}
+      - STATE_FILE_PATH=${STATE_FILE_PATH:-/state/state.json}
+      - RUNTIME_SECRETS_DIR=${RUNTIME_SECRETS_DIR:-/runtime-secrets}
+      - DEVICE_RUNTIME_SECRETS_VOLUME=${DEVICE_RUNTIME_SECRETS_VOLUME:-greenhouse_device_runtime_secrets}
+      - DEVICE_NETWORK_NAME=${DEVICE_NETWORK_NAME:-greenhouse_iot_net}
+      - DEVICE_IMAGE=${DEVICE_IMAGE:-docker-device-runtime}
+      - DEVICE_GROUP_PROJECT=${DEVICE_GROUP_PROJECT:-devices}
+      - DEVICE_GROUP_SERVICE=${DEVICE_GROUP_SERVICE:-device-runtime}
+      - SENSOR_IP_RANGE=${SENSOR_IP_RANGE:-172.28.1.10-172.28.1.250}
+      - ACTUATOR_IP_RANGE=${ACTUATOR_IP_RANGE:-172.28.2.10-172.28.2.250}
+      - AUTO_RESTART_MAX_RETRIES=${AUTO_RESTART_MAX_RETRIES:-5}
+      - STOP_TIMEOUT_SECONDS=${STOP_TIMEOUT_SECONDS:-10}
     volumes:
       - ../device-emulator:/state
       - device_runtime_secrets:/runtime-secrets

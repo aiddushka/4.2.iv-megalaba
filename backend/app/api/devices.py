@@ -44,7 +44,7 @@ def register_device(
         bus_address=payload.bus_address,
         components=payload.components,
     )
-    pepper = getattr(request.app.state, "device_token_pepper", "dev-pepper")
+    pepper = request.app.state.device_token_pepper
     token = device_token_service.generate_device_token()
     device_token_service.set_device_token(db=db, device=device, token=token, pepper=pepper)
     # Return token only once (registration response).
@@ -96,7 +96,7 @@ def rotate_device_token(
     device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    pepper = getattr(request.app.state, "device_token_pepper", "dev-pepper")
+    pepper = request.app.state.device_token_pepper
     token = device_token_service.generate_device_token()
     device_token_service.set_device_token(db=db, device=device, token=token, pepper=pepper)
     return {"ok": True, "device_uid": device_uid, "device_token": token, "version": device.device_token_version}

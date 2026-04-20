@@ -21,7 +21,9 @@ MQTT_ACTUATOR_STATE_TOPIC = os.getenv(
 )
 MQTT_HEARTBEAT_TOPIC = os.getenv("MQTT_HEARTBEAT_TOPIC", "greenhouse/devices/+/heartbeat")
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "greenhouse-backend")
-DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
+DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "").strip()
+if not DEVICE_TOKEN_PEPPER:
+    raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_PEPPER")
 _DEVICE_TOKEN_REJECT_LOG_INTERVAL = float(
     os.getenv("MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL", "30")
 )

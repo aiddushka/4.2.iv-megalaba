@@ -5,6 +5,13 @@ from sqlalchemy import text
 from pathlib import Path
 import os
 
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
 from app.database.session import engine
@@ -13,9 +20,9 @@ import app.models.device_link  # noqa: F401
 
 
 def create_app() -> FastAPI:
-    # создаем таблицы в БД
+    # СЃРѕР·РґР°РµРј С‚Р°Р±Р»РёС†С‹ РІ Р‘Р”
     Base.metadata.create_all(bind=engine)
-    # миграция: добавить can_view_dashboard для существующих БД
+    # РјРёРіСЂР°С†РёСЏ: РґРѕР±Р°РІРёС‚СЊ can_view_dashboard РґР»СЏ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… Р‘Р”
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -25,7 +32,7 @@ def create_app() -> FastAPI:
             )
     except Exception:
         pass
-    # миграция: добавить новые поля devices для расширенной конфигурации
+    # РјРёРіСЂР°С†РёСЏ: РґРѕР±Р°РІРёС‚СЊ РЅРѕРІС‹Рµ РїРѕР»СЏ devices РґР»СЏ СЂР°СЃС€РёСЂРµРЅРЅРѕР№ РєРѕРЅС„РёРіСѓСЂР°С†РёРё
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -111,7 +118,7 @@ def create_app() -> FastAPI:
     except Exception:
         pass
 
-    # Учётная запись админа по умолчанию (admin / 123)
+    # Bootstrap admin account can be configured via env.
     try:
         from app.database.session import SessionLocal
         from app.models.user import User
@@ -119,8 +126,14 @@ def create_app() -> FastAPI:
 
         db = SessionLocal()
         try:
-            if db.query(User).filter(User.username == "admin").first() is None:
-                auth_service.create_user(db, "admin", "123", is_admin=True)
+            bootstrap_enabled = os.getenv("BOOTSTRAP_ADMIN_ENABLED", "false").lower() == "true"
+            bootstrap_user = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
+            bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+            if bootstrap_enabled:
+                if not bootstrap_user or not bootstrap_password:
+                    raise RuntimeError("BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD are required when BOOTSTRAP_ADMIN_ENABLED=true")
+                if db.query(User).filter(User.username == bootstrap_user).first() is None:
+                    auth_service.create_user(db, bootstrap_user, bootstrap_password, is_admin=True)
         finally:
             db.close()
     except Exception:
@@ -141,10 +154,10 @@ def create_app() -> FastAPI:
     )
 
     # Service-to-service key for sensor-emulator-manager internal calls (e.g. runtime secrets).
-    app.state.manager_key = os.getenv("MANAGER_KEY", "")
-    app.state.device_token_pepper = os.getenv("DEVICE_TOKEN_PEPPER", "dev-pepper")
+    app.state.manager_key = _require_env("MANAGER_KEY")
+    app.state.device_token_pepper = _require_env("DEVICE_TOKEN_PEPPER")
 
-    # подключаем все роутеры
+    # РїРѕРґРєР»СЋС‡Р°РµРј РІСЃРµ СЂРѕСѓС‚РµСЂС‹
     app.include_router(auth.router)
     app.include_router(devices.router)
     app.include_router(sensors.router)
@@ -168,3 +181,5 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
