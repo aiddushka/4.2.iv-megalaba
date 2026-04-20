@@ -2,6 +2,7 @@ import time
 import random
 import os
 import json
+import ssl
 import paho.mqtt.client as mqtt
 
 from runtime_token import DeviceTokenHolder
@@ -12,6 +13,9 @@ SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 4.0
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
+MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
+MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
 MQTT_TOPIC = f"greenhouse/sensors/{DEVICE_UID}/data"
@@ -24,6 +28,10 @@ if __name__ == "__main__":
     mqtt_client = mqtt.Client(client_id=f"{DEVICE_UID}-publisher")
     if MQTT_USERNAME and MQTT_PASSWORD:
         mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    if MQTT_TLS_ENABLED:
+        mqtt_client.tls_set(ca_certs=MQTT_TLS_CA_CERT, cert_reqs=ssl.CERT_REQUIRED)
+        if MQTT_TLS_INSECURE:
+            mqtt_client.tls_insecure_set(True)
     mqtt_client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
     mqtt_client.loop_start()
     last_heartbeat_at = 0.0

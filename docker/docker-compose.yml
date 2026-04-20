@@ -43,6 +43,7 @@ services:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
       - ./mosquitto/certs:/mosquitto/config/certs:ro
+      - mqtt_shared_certs:/mosquitto/data/certs
     networks:
       - default
       - greenhouse_iot_net
@@ -111,7 +112,7 @@ services:
     volumes:
       - ../backend:/app
       - runtime_token_store:/runtime-token-store
-      - ./mosquitto/certs/ca.crt:/mqtt-certs/ca.crt:ro
+      - mqtt_shared_certs:/mqtt-certs:ro
     networks:
       - default
       - greenhouse_iot_net
@@ -159,7 +160,11 @@ services:
     environment:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
-      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT_DEVICE:-8883}
+      - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_DEVICE:-true}
+      - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_DEVICE:-/mqtt-certs/ca.crt}
+      - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_DEVICE:-false}
+      - MQTT_SHARED_CERTS_VOLUME=${MQTT_SHARED_CERTS_VOLUME:-greenhouse_mqtt_shared_certs}
       - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
       - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
       - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
@@ -188,6 +193,7 @@ volumes:
   postgres_data:
   device_runtime_secrets:
   runtime_token_store:
+  mqtt_shared_certs:
 
 networks:
   greenhouse_iot_net:
