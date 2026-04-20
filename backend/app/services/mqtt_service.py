@@ -34,14 +34,42 @@ _DEVICE_TOKEN_REJECT_LOG_INTERVAL = float(
 
 _client: mqtt.Client | None = None
 _heartbeats: dict[str, dict[str, Any]] = {}
+_heartbeat_received_at_mono: dict[str, float] = {}
 _reject_lock = threading.Lock()
 _device_token_reject_totals: dict[str, int] = {"sensor": 0, "actuator": 0, "heartbeat": 0}
 _device_token_reject_last_log_mono = 0.0
+_runtime_lock = threading.Lock()
+_mqtt_connected = False
+_last_message_mono: float | None = None
+_disconnect_count = 0
 
 
 def get_device_token_reject_totals() -> dict[str, int]:
     with _reject_lock:
         return dict(_device_token_reject_totals)
+
+
+def get_heartbeat_ages_seconds() -> dict[str, float]:
+    now = time.monotonic()
+    return {
+        device_uid: round(max(0.0, now - seen_at), 1)
+        for device_uid, seen_at in _heartbeat_received_at_mono.items()
+    }
+
+
+def get_runtime_stats() -> dict[str, Any]:
+    with _runtime_lock:
+        connected = _mqtt_connected
+        last_message_mono = _last_message_mono
+        disconnect_count = _disconnect_count
+    age_seconds = None if last_message_mono is None else round(max(0.0, time.monotonic() - last_message_mono), 1)
+    return {
+        "mqtt_connected": connected,
+        "last_message_age_seconds": age_seconds,
+        "disconnect_count": disconnect_count,
+        "invalid_token_totals": get_device_token_reject_totals(),
+        "heartbeat_count": len(_heartbeats),
+    }
 
 
 def _record_invalid_device_token(kind: str, device_uid: str | None) -> None:
@@ -70,7 +98,10 @@ def _decode_payload(payload_raw: bytes) -> dict[str, Any] | None:
 
 
 def _on_connect(client: mqtt.Client, _userdata, _flags, reason_code, _properties=None):
+    global _mqtt_connected
     if reason_code == 0:
+        with _runtime_lock:
+            _mqtt_connected = True
         client.subscribe(MQTT_SENSOR_TOPIC)
         client.subscribe(MQTT_ACTUATOR_STATE_TOPIC)
         client.subscribe(MQTT_HEARTBEAT_TOPIC)
@@ -80,6 +111,14 @@ def _on_connect(client: mqtt.Client, _userdata, _flags, reason_code, _properties
         )
     else:
         print(f"[mqtt] connection failed, code={reason_code}")
+
+
+def _on_disconnect(_client: mqtt.Client, _userdata, reason_code, _properties=None):
+    global _mqtt_connected, _disconnect_count
+    with _runtime_lock:
+        _mqtt_connected = False
+        _disconnect_count += 1
+    print(f"[mqtt] disconnected, code={reason_code}")
 
 
 def _handle_sensor_payload(payload_dict: dict[str, Any]) -> None:
@@ -140,11 +179,15 @@ def _handle_heartbeat(topic: str, payload_dict: dict[str, Any]) -> None:
             _record_invalid_device_token("heartbeat", device_uid)
             return
         _heartbeats[device_uid] = payload_dict
+        _heartbeat_received_at_mono[device_uid] = time.monotonic()
     finally:
         db.close()
 
 
 def _on_message(_client: mqtt.Client, _userdata, message: mqtt.MQTTMessage):
+    global _last_message_mono
+    with _runtime_lock:
+        _last_message_mono = time.monotonic()
     payload_dict = _decode_payload(message.payload)
     if not payload_dict:
         return
@@ -166,6 +209,7 @@ def start_mqtt_listener() -> None:
     client = mqtt.Client(client_id=MQTT_CLIENT_ID)
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     client.on_connect = _on_connect
+    client.on_disconnect = _on_disconnect
     client.on_message = _on_message
     client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
     client.loop_start()

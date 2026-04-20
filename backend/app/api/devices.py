@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -101,6 +103,27 @@ def get_runtime_token_internal(
         "device_uid": device.device_uid,
         "device_token": getattr(device, "device_token", None),
         "device_token_version": int(getattr(device, "device_token_version", 1) or 1),
+    }
+
+
+@router.get("/internal/metrics")
+def get_internal_metrics(request: Request):
+    """
+    INTERNAL endpoint for quick runtime observability.
+    Protected by X-Manager-Key header.
+    """
+    _require_manager_key(request)
+    stale_seconds = int(os.getenv("HEARTBEAT_STALE_SECONDS", "30"))
+    runtime = mqtt_service.get_runtime_stats()
+    heartbeat_ages = mqtt_service.get_heartbeat_ages_seconds()
+    stale_devices = sorted([uid for uid, age in heartbeat_ages.items() if age > stale_seconds])
+    max_age = max(heartbeat_ages.values()) if heartbeat_ages else None
+    return {
+        "mqtt": runtime,
+        "heartbeat_stale_seconds": stale_seconds,
+        "heartbeat_ages_seconds": heartbeat_ages,
+        "stale_devices": stale_devices,
+        "max_heartbeat_age_seconds": max_age,
     }
 
 
