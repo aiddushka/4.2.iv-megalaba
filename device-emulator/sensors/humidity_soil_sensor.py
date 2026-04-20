@@ -16,6 +16,8 @@ MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
 MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
 MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
 MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
+MQTT_TLS_CLIENT_CERT = os.getenv("MQTT_TLS_CLIENT_CERT", "").strip()
+MQTT_TLS_CLIENT_KEY = os.getenv("MQTT_TLS_CLIENT_KEY", "").strip()
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
 MQTT_TOPIC = f"greenhouse/sensors/{DEVICE_UID}/data"
@@ -29,7 +31,12 @@ if __name__ == "__main__":
     if MQTT_USERNAME and MQTT_PASSWORD:
         mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     if MQTT_TLS_ENABLED:
-        mqtt_client.tls_set(ca_certs=MQTT_TLS_CA_CERT, cert_reqs=ssl.CERT_REQUIRED)
+        mqtt_client.tls_set(
+            ca_certs=MQTT_TLS_CA_CERT,
+            certfile=MQTT_TLS_CLIENT_CERT or None,
+            keyfile=MQTT_TLS_CLIENT_KEY or None,
+            cert_reqs=ssl.CERT_REQUIRED,
+        )
         if MQTT_TLS_INSECURE:
             mqtt_client.tls_insecure_set(True)
     mqtt_client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)

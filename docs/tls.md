@@ -70,3 +70,22 @@ docker compose logs backend --tail=120
 - только порт `8883`;
 - в логах broker есть `negotiated TLSv1.3`;
 - backend логирует `connecting to mqtt-broker:8883`.
+
+## mTLS (первая итерация, единый порт)
+
+В проекте используется один MQTT-порт `8883` с обязательным client certificate.
+
+Схема сертификатов:
+
+- server TLS: `ca.crt` + `server.crt/server.key`
+- client mTLS CA: `device-ca.crt` (+ локальный `device-ca.key`)
+- backend client cert: `backend_client.crt/backend_client.key` (CN=`backend_user`)
+- device client cert: `device_client.crt/device_client.key` (CN=`device_user`)
+
+### Быстрая проверка mTLS
+
+1) Без client cert к `8883` подключение должно падать.
+2) С валидным client cert к `8883` подключение должно проходить.
+3) В логах broker ожидаемо:
+   - `tlsv1 alert unknown ca` или `peer did not return a certificate` для невалидного/отсутствующего cert;
+   - `u'backend_user'` и `u'device_user'` + `negotiated TLSv1.3` для успешных подключений.

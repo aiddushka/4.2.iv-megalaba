@@ -27,10 +27,17 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
 MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
 MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
 MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
+MQTT_TLS_CLIENT_CERT = os.getenv("MQTT_TLS_CLIENT_CERT", "").strip()
+MQTT_TLS_CLIENT_KEY = os.getenv("MQTT_TLS_CLIENT_KEY", "").strip()
 if not MQTT_USERNAME or not MQTT_PASSWORD:
     raise RuntimeError("Missing required environment variables: MQTT_USERNAME/MQTT_PASSWORD")
 if MQTT_TLS_ENABLED and not MQTT_TLS_CA_CERT:
     raise RuntimeError("Missing required environment variable: MQTT_TLS_CA_CERT when MQTT_TLS_ENABLED=true")
+if MQTT_TLS_ENABLED and (not MQTT_TLS_CLIENT_CERT or not MQTT_TLS_CLIENT_KEY):
+    raise RuntimeError(
+        "Missing required environment variables: MQTT_TLS_CLIENT_CERT/MQTT_TLS_CLIENT_KEY "
+        "when MQTT_TLS_ENABLED=true"
+    )
 DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "").strip()
 if not DEVICE_TOKEN_PEPPER:
     raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_PEPPER")
@@ -215,7 +222,12 @@ def start_mqtt_listener() -> None:
     client = mqtt.Client(client_id=MQTT_CLIENT_ID)
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     if MQTT_TLS_ENABLED:
-        client.tls_set(ca_certs=MQTT_TLS_CA_CERT, cert_reqs=ssl.CERT_REQUIRED)
+        client.tls_set(
+            ca_certs=MQTT_TLS_CA_CERT,
+            certfile=MQTT_TLS_CLIENT_CERT,
+            keyfile=MQTT_TLS_CLIENT_KEY,
+            cert_reqs=ssl.CERT_REQUIRED,
+        )
         if MQTT_TLS_INSECURE:
             client.tls_insecure_set(True)
     client.on_connect = _on_connect

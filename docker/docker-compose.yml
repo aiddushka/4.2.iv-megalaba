@@ -28,12 +28,17 @@ services:
       cp /mosquitto/config/acl.conf /mosquitto/data/acl.conf &&
       mkdir -p /mosquitto/data/certs &&
       cp /mosquitto/config/certs/ca.crt /mosquitto/data/certs/ca.crt &&
+      cp /mosquitto/config/certs/device-ca.crt /mosquitto/data/certs/device-ca.crt &&
       cp /mosquitto/config/certs/server.crt /mosquitto/data/certs/server.crt &&
       cp /mosquitto/config/certs/server.key /mosquitto/data/certs/server.key &&
-      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key &&
+      cp /mosquitto/config/certs/backend_client.crt /mosquitto/data/certs/backend_client.crt &&
+      cp /mosquitto/config/certs/backend_client.key /mosquitto/data/certs/backend_client.key &&
+      cp /mosquitto/config/certs/device_client.crt /mosquitto/data/certs/device_client.crt &&
+      cp /mosquitto/config/certs/device_client.key /mosquitto/data/certs/device_client.key &&
+      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/backend_client.key /mosquitto/data/certs/device_client.crt /mosquitto/data/certs/device_client.key &&
       chmod 0700 /mosquitto/data/passwords /mosquitto/data/acl.conf &&
-      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/server.crt &&
-      chmod 0600 /mosquitto/data/certs/server.key &&
+      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/device_client.crt &&
+      chmod 0600 /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.key /mosquitto/data/certs/device_client.key &&
       exec mosquitto -c /mosquitto/config/mosquitto.conf
       "
     ports:
@@ -92,6 +97,8 @@ services:
       - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_BACKEND:-true}
       - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_BACKEND:-/mqtt-certs/ca.crt}
       - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_BACKEND:-false}
+      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_BACKEND:-/mqtt-certs/backend_client.crt}
+      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_BACKEND:-/mqtt-certs/backend_client.key}
       - MQTT_SENSOR_TOPIC=${MQTT_SENSOR_TOPIC:-greenhouse/sensors/+/data}
       - MQTT_ACTUATOR_STATE_TOPIC=${MQTT_ACTUATOR_STATE_TOPIC:-greenhouse/actuators/+/state}
       - MQTT_HEARTBEAT_TOPIC=${MQTT_HEARTBEAT_TOPIC:-greenhouse/devices/+/heartbeat}
@@ -163,6 +170,8 @@ services:
       - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_DEVICE:-true}
       - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_DEVICE:-/mqtt-certs/ca.crt}
       - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_DEVICE:-false}
+      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_DEVICE:-/mqtt-certs/device_client.crt}
+      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_DEVICE:-/mqtt-certs/device_client.key}
       - MQTT_SHARED_CERTS_VOLUME=${MQTT_SHARED_CERTS_VOLUME:-greenhouse_mqtt_shared_certs}
       - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
       - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}

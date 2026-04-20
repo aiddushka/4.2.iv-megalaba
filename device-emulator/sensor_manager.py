@@ -27,6 +27,8 @@ MQTT_BROKER_PORT = os.getenv("MQTT_BROKER_PORT", "1883")
 MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
 MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
 MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
+MQTT_TLS_CLIENT_CERT = os.getenv("MQTT_TLS_CLIENT_CERT", "").strip()
+MQTT_TLS_CLIENT_KEY = os.getenv("MQTT_TLS_CLIENT_KEY", "").strip()
 MQTT_USERNAME_DEVICE = os.getenv("MQTT_USERNAME_DEVICE", "").strip()
 MQTT_PASSWORD_DEVICE = os.getenv("MQTT_PASSWORD_DEVICE", "").strip()
 AUTO_RESTART_MAX_RETRIES = int(os.getenv("AUTO_RESTART_MAX_RETRIES", "5"))
@@ -276,6 +278,8 @@ def _ensure_created(
             "MQTT_TLS_ENABLED": "true" if MQTT_TLS_ENABLED else "false",
             "MQTT_TLS_CA_CERT": MQTT_TLS_CA_CERT,
             "MQTT_TLS_INSECURE": "true" if MQTT_TLS_INSECURE else "false",
+            "MQTT_TLS_CLIENT_CERT": MQTT_TLS_CLIENT_CERT,
+            "MQTT_TLS_CLIENT_KEY": MQTT_TLS_CLIENT_KEY,
             "MQTT_USERNAME": MQTT_USERNAME_DEVICE,
             "MQTT_PASSWORD": MQTT_PASSWORD_DEVICE,
             "ACTUATOR_TYPE": device_type,
