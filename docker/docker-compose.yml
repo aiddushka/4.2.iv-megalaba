@@ -33,12 +33,10 @@ services:
       cp /mosquitto/config/certs/server.key /mosquitto/data/certs/server.key &&
       cp /mosquitto/config/certs/backend_client.crt /mosquitto/data/certs/backend_client.crt &&
       cp /mosquitto/config/certs/backend_client.key /mosquitto/data/certs/backend_client.key &&
-      cp /mosquitto/config/certs/device_client.crt /mosquitto/data/certs/device_client.crt &&
-      cp /mosquitto/config/certs/device_client.key /mosquitto/data/certs/device_client.key &&
-      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/backend_client.key /mosquitto/data/certs/device_client.crt /mosquitto/data/certs/device_client.key &&
+      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/backend_client.key &&
       chmod 0700 /mosquitto/data/passwords /mosquitto/data/acl.conf &&
-      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/device_client.crt &&
-      chmod 0600 /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.key /mosquitto/data/certs/device_client.key &&
+      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/backend_client.crt &&
+      chmod 0600 /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.key &&
       exec mosquitto -c /mosquitto/config/mosquitto.conf
       "
     ports:
@@ -170,9 +168,13 @@ services:
       - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_DEVICE:-true}
       - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_DEVICE:-/mqtt-certs/ca.crt}
       - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_DEVICE:-false}
-      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_DEVICE:-/mqtt-certs/device_client.crt}
-      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_DEVICE:-/mqtt-certs/device_client.key}
+      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_DEVICE:-}
+      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_DEVICE:-}
       - MQTT_SHARED_CERTS_VOLUME=${MQTT_SHARED_CERTS_VOLUME:-greenhouse_mqtt_shared_certs}
+      - MQTT_CERTS_RW_DIR=${MQTT_CERTS_RW_DIR:-/mqtt-certs-rw}
+      - MQTT_DEVICE_CA_CERT_PATH=${MQTT_DEVICE_CA_CERT_PATH:-/mosquitto-config-certs/device-ca.crt}
+      - MQTT_DEVICE_CA_KEY_PATH=${MQTT_DEVICE_CA_KEY_PATH:-/mosquitto-config-certs/device-ca.key}
+      - MQTT_DEVICE_CERTS_SUBDIR=${MQTT_DEVICE_CERTS_SUBDIR:-devices}
       - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
       - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
       - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
@@ -192,6 +194,8 @@ services:
     volumes:
       - ../device-emulator:/state
       - device_runtime_secrets:/runtime-secrets
+      - mqtt_shared_certs:/mqtt-certs-rw
+      - ./mosquitto/certs:/mosquitto-config-certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - default

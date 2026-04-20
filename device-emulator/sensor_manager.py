@@ -2,6 +2,7 @@ import ipaddress
 import json
 import os
 import signal
+import subprocess
 import time
 from pathlib import Path
 
@@ -39,6 +40,10 @@ MANAGER_KEY = os.getenv("MANAGER_KEY", "")
 RUNTIME_SECRETS_DIR = os.getenv("RUNTIME_SECRETS_DIR", "").strip()
 DEVICE_RUNTIME_SECRETS_VOLUME = os.getenv("DEVICE_RUNTIME_SECRETS_VOLUME", "").strip()
 MQTT_SHARED_CERTS_VOLUME = os.getenv("MQTT_SHARED_CERTS_VOLUME", "").strip()
+MQTT_CERTS_RW_DIR = os.getenv("MQTT_CERTS_RW_DIR", "/mqtt-certs-rw").strip()
+MQTT_DEVICE_CA_CERT_PATH = os.getenv("MQTT_DEVICE_CA_CERT_PATH", "/mosquitto-config-certs/device-ca.crt").strip()
+MQTT_DEVICE_CA_KEY_PATH = os.getenv("MQTT_DEVICE_CA_KEY_PATH", "/mosquitto-config-certs/device-ca.key").strip()
+MQTT_DEVICE_CERTS_SUBDIR = os.getenv("MQTT_DEVICE_CERTS_SUBDIR", "devices").strip() or "devices"
 
 SENSOR_SCRIPT_BY_DEVICE_TYPE = {
     "TEMP_SENSOR": "sensors/temperature_sensor.py",
@@ -84,6 +89,81 @@ def _legacy_container_name(device_uid: str) -> str:
 
 def _device_secret_basename(device_uid: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
+
+
+def _sanitize_cert_cn(raw: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in raw).strip("-")
+    return safe or "device"
+
+
+def _ensure_device_mtls_material(device_uid: str, info: dict) -> tuple[str | None, str | None]:
+    if not MQTT_TLS_ENABLED:
+        return None, None
+    if not MQTT_CERTS_RW_DIR or not MQTT_DEVICE_CA_CERT_PATH or not MQTT_DEVICE_CA_KEY_PATH:
+        raise RuntimeError("mTLS enabled but MQTT cert paths are not configured")
+
+    certs_base = Path(MQTT_CERTS_RW_DIR) / MQTT_DEVICE_CERTS_SUBDIR
+    certs_base.mkdir(parents=True, exist_ok=True)
+    safe_uid = _device_secret_basename(device_uid)
+    cert_path = certs_base / f"{safe_uid}.crt"
+    key_path = certs_base / f"{safe_uid}.key"
+    csr_path = certs_base / f"{safe_uid}.csr"
+    serial_path = certs_base / "device-ca.srl"
+
+    if (
+        cert_path.is_file()
+        and key_path.is_file()
+        and cert_path.stat().st_size > 0
+        and key_path.stat().st_size > 0
+    ):
+        info["mtls_cert_path"] = str(cert_path)
+        info["mtls_key_path"] = str(key_path)
+        return str(cert_path), str(key_path)
+    try:
+        cert_path.unlink(missing_ok=True)
+        csr_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    subj = (
+        f"/C=RU/ST=Tyumen/L=Tyumen/O=Greenhouse Dev/OU=Devices/"
+        f"CN={_sanitize_cert_cn(device_uid)}"
+    )
+    subprocess.run(["openssl", "genrsa", "-out", str(key_path), "2048"], check=True)
+    subprocess.run(
+        ["openssl", "req", "-new", "-key", str(key_path), "-out", str(csr_path), "-subj", subj],
+        check=True,
+    )
+    sign_cmd = [
+        "openssl",
+        "x509",
+        "-req",
+        "-in",
+        str(csr_path),
+        "-CA",
+        MQTT_DEVICE_CA_CERT_PATH,
+        "-CAkey",
+        MQTT_DEVICE_CA_KEY_PATH,
+        "-out",
+        str(cert_path),
+        "-days",
+        "365",
+        "-sha256",
+        "-CAserial",
+        str(serial_path),
+    ]
+    if not serial_path.exists():
+        sign_cmd.append("-CAcreateserial")
+    subprocess.run(sign_cmd, check=True)
+    try:
+        csr_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    info["mtls_cert_path"] = str(cert_path)
+    info["mtls_key_path"] = str(key_path)
+    print(f"[manager] generated per-device mTLS cert for {device_uid}")
+    return str(cert_path), str(key_path)
 
 
 def _sync_runtime_secret_file(
@@ -269,6 +349,10 @@ def _ensure_created(
         if effective_token is None:
             remembered = str(info.get("synced_device_token") or "").strip()
             effective_token = remembered if remembered else None
+        client_cert_path, client_key_path = _ensure_device_mtls_material(device_uid, info)
+        cert_mount_dir = f"/mqtt-certs/{MQTT_DEVICE_CERTS_SUBDIR}"
+        cert_mount_base = cert_mount_dir.rstrip("/")
+        cert_basename = _device_secret_basename(device_uid)
         env = {
             "DEVICE_UID": device_uid,
             "DEVICE_TOKEN": effective_token,
@@ -278,8 +362,16 @@ def _ensure_created(
             "MQTT_TLS_ENABLED": "true" if MQTT_TLS_ENABLED else "false",
             "MQTT_TLS_CA_CERT": MQTT_TLS_CA_CERT,
             "MQTT_TLS_INSECURE": "true" if MQTT_TLS_INSECURE else "false",
-            "MQTT_TLS_CLIENT_CERT": MQTT_TLS_CLIENT_CERT,
-            "MQTT_TLS_CLIENT_KEY": MQTT_TLS_CLIENT_KEY,
+            "MQTT_TLS_CLIENT_CERT": (
+                f"{cert_mount_base}/{cert_basename}.crt"
+                if client_cert_path
+                else MQTT_TLS_CLIENT_CERT
+            ),
+            "MQTT_TLS_CLIENT_KEY": (
+                f"{cert_mount_base}/{cert_basename}.key"
+                if client_key_path
+                else MQTT_TLS_CLIENT_KEY
+            ),
             "MQTT_USERNAME": MQTT_USERNAME_DEVICE,
             "MQTT_PASSWORD": MQTT_PASSWORD_DEVICE,
             "ACTUATOR_TYPE": device_type,
