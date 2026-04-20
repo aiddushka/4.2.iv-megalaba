@@ -22,3 +22,5 @@ postgres_data
 docker/mosquitto/certs/*.key
 docker/mosquitto/certs/*.csr
 docker/mosquitto/certs/*.srl
+docker/nginx/certs/*.key
+docker/nginx/certs/*.csr

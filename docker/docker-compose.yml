@@ -122,6 +122,19 @@ services:
       - default
       - greenhouse_iot_net
 
+  backend-https-proxy:
+    image: nginx:1.27-alpine
+    container_name: greenhouse_backend_https_proxy
+    depends_on:
+      - backend
+    ports:
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - default
+
   frontend-dashboard:
     build:
       context: ..
