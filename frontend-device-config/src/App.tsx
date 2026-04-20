@@ -39,7 +39,7 @@ export default function App() {
           </Link>
         </div>
         <div style={{ width: 220, textAlign: "right", fontSize: "0.85rem", color: "#6b7280" }}>
-          :3001
+          /config
         </div>
       </header>
       <main style={{ padding: "2rem" }}>

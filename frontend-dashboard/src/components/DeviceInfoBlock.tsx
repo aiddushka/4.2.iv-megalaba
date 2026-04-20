@@ -28,7 +28,7 @@ export function DeviceInfoBlock({ device }: Props) {
     LIGHT_ACTUATOR: "AUno_актуратор_освещения.png",
   };
   const imageName = imageByDeviceType[device.device_type] || "AUno_датчик_температуры.png";
-  const previewUrl = `https://localhost:8443/static/images/ArduinoUnoComponents/${encodeURIComponent(imageName)}`;
+  const previewUrl = `/static/images/ArduinoUnoComponents/${encodeURIComponent(imageName)}`;
   const rowStyle: React.CSSProperties = { borderBottom: "1px solid #1f2937" };
   const tdStyle: React.CSSProperties = { padding: "0.4rem 0.5rem", fontSize: "0.85rem" };
 

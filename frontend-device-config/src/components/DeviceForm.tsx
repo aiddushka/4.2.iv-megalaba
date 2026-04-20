@@ -142,7 +142,7 @@ export function DeviceForm({ onSubmit }: Props) {
     LIGHT_ACTUATOR: "AUno_актуратор_освещения.png",
   };
   const previewImageName = imageByDeviceType[values.device_type] || "AUno_датчик_температуры.png";
-  const previewUrl = `https://localhost:8443/static/images/ArduinoUnoComponents/${encodeURIComponent(previewImageName)}`;
+  const previewUrl = `/static/images/ArduinoUnoComponents/${encodeURIComponent(previewImageName)}`;
 
   return (
     <form onSubmit={handleSubmit}>

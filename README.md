@@ -7,9 +7,9 @@
 - **Backend**: Python, FastAPI, SQLAlchemy, JWT auth
 - **БД**: PostgreSQL
 - **MQTT**: Eclipse Mosquitto (брокер телеметрии)
-- **Frontend**:
-  - **Dashboard** (порт **3000**) — просмотр и управление (для админа)
-  - **Device Configurator** (порт **3001**) — регистрация/первичная конфигурация устройств (без авторизации)
+- **Frontend** (снаружи только **HTTPS** через Nginx, порт **8443**):
+  - **Dashboard** — `https://localhost:8443/` (просмотр и управление, для админа)
+  - **Device Configurator** — `https://localhost:8443/config/` (регистрация устройств, без авторизации)
 - **Эмуляторы**:
   - менеджер сенсоров в Docker — сам запускает сенсорные скрипты для активных датчиков
   - актуаторы — отдельные скрипты для ручного запуска
@@ -41,17 +41,19 @@ docker compose up --build
 
 - `greenhouse_postgres` — PostgreSQL (порт **5432**)
 - `greenhouse_mqtt_broker` — MQTT broker (**TLS-only**, порт **8883**)
-- `greenhouse_backend` — FastAPI (порт **8000**)
-- `greenhouse_frontend_dashboard` — Vite dev server (наружу **3000**)
-- `greenhouse_frontend_device_config` — Vite dev server (наружу **3001**)
+- `greenhouse_backend` — FastAPI (только внутри сети Docker, порт **8000**)
+- `greenhouse_backend_https_proxy` — Nginx: TLS, статика фронтов и прокси **`/api/`** → backend
+- `greenhouse_frontend_dashboard` — Vite dev server (доступ через Nginx на **`/`**)
+- `greenhouse_frontend_device_config` — Vite dev server (доступ через Nginx на **`/config/`**)
 - `greenhouse_sensor_emulator_manager` — менеджер сенсоров (без порта)
 
 ### Проверка
 
-- **API health**: `http://localhost:8000/` → `{"message":"IoT Greenhouse API running"}`
-- **Swagger**: `http://localhost:8000/docs`
-- **Dashboard**: `http://localhost:3000`
-- **Device Configurator**: `http://localhost:3001`
+- **Редирект на HTTPS**: `http://localhost:8080/` → `https://localhost:8443/…`
+- **API (через прокси)**: `https://localhost:8443/api/` — те же маршруты, что у FastAPI с корня (например `https://localhost:8443/api/auth/login`)
+- **Swagger**: `https://localhost:8443/docs`
+- **Dashboard**: `https://localhost:8443/`
+- **Device Configurator**: `https://localhost:8443/config/`
 
 ## MQTT TLS (кратко)
 
@@ -81,7 +83,7 @@ docker compose logs backend --tail=120
 
 ## Как “живет” система (коротко)
 
-1) На `http://localhost:3001` регистрируем устройства (`POST /devices/register`). Устройство попадает в статус `unassigned`.
+1) На `https://localhost:8443/config/` регистрируем устройства (`POST /api/devices/register`). Устройство попадает в статус `unassigned`.
 2) На Dashboard (админ) “устанавливаем” устройство (`POST /devices/assign`) → статус становится `active`.
 3) Менеджер сенсоров в Docker опрашивает `GET /devices/active-sensors` и запускает скрипты сенсоров для активных устройств.
 4) Сенсоры публикуют телеметрию в MQTT-топики `greenhouse/sensors/<device_uid>/data`, backend подписывается и сохраняет данные (HTTP `POST /sensor-data/` также остаётся доступным).
