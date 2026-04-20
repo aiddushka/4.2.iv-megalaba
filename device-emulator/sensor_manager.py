@@ -13,6 +13,7 @@ from docker.types import Mount
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 ORCHESTRATION_STATE_URL = f"{BACKEND_URL}/devices/internal/orchestration-state"
+RUNTIME_TOKEN_URL_TEMPLATE = f"{BACKEND_URL}/devices/internal/runtime-token/{{device_uid}}"
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "10"))
 STATE_FILE_PATH = Path(os.getenv("STATE_FILE_PATH", "/app/state.json"))
@@ -169,6 +170,24 @@ def _fetch_orchestration_state() -> list[dict] | None:
     except Exception as exc:
         print(f"[manager] failed to fetch orchestration state: {exc}")
     return None
+
+
+def _fetch_runtime_token(device_uid: str) -> tuple[str | None, int | None]:
+    try:
+        headers = {"X-Manager-Key": MANAGER_KEY} if MANAGER_KEY else {}
+        url = RUNTIME_TOKEN_URL_TEMPLATE.format(device_uid=device_uid)
+        response = requests.get(url, timeout=5, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict):
+            tok = payload.get("device_token")
+            ver = payload.get("device_token_version")
+            token_value = tok if isinstance(tok, str) else None
+            token_ver = int(ver) if ver is not None else None
+            return token_value, token_ver
+    except Exception as exc:
+        print(f"[manager] failed to fetch runtime token for {device_uid}: {exc}")
+    return None, None
 
 
 def _device_command(device_type: str) -> str:
@@ -358,6 +377,21 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
     if desired_runtime_state == "removed":
         _ensure_removed(client, state, device_uid)
         return
+
+    # New flow: orchestration-state omits raw token; fetch per-device token only on sync need.
+    info = state["devices"].setdefault(device_uid, {})
+    desired_ver = int(device_token_version) if device_token_version is not None else None
+    synced_ver = int(info.get("synced_device_token_version")) if info.get("synced_device_token_version") is not None else None
+    needs_token_sync = (desired_ver is not None and desired_ver != synced_ver) or not info.get(
+        "synced_device_token"
+    )
+    if not token_is_present and needs_token_sync:
+        fetched_token, fetched_ver = _fetch_runtime_token(device_uid)
+        if fetched_token:
+            device_token = fetched_token
+            token_is_present = True
+        if fetched_ver is not None:
+            device_token_version = fetched_ver
 
     container, info = _ensure_created(client, network, state, device_uid, device_type, device_token)
     _sync_runtime_secret_file(device_uid, device_token, device_token_version, info)

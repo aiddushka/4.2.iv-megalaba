@@ -82,6 +82,28 @@ def get_orchestration_state_internal(request: Request, db: Session = Depends(get
     return rows
 
 
+@router.get("/internal/runtime-token/{device_uid}")
+def get_runtime_token_internal(
+    device_uid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    INTERNAL endpoint for sensor-emulator-manager.
+    Returns token for exactly one device (least-privilege alternative to bulk state endpoint).
+    Protected by X-Manager-Key header.
+    """
+    _require_manager_key(request)
+    device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {
+        "device_uid": device.device_uid,
+        "device_token": getattr(device, "device_token", None),
+        "device_token_version": int(getattr(device, "device_token_version", 1) or 1),
+    }
+
+
 @router.post("/token/rotate/{device_uid}")
 def rotate_device_token(
     device_uid: str,
