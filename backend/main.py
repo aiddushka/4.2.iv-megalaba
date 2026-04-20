@@ -148,7 +148,7 @@ def create_app() -> FastAPI:
 
     cors_origins = _parse_csv_env(
         "CORS_ALLOW_ORIGINS",
-        "https://localhost:3000,https://localhost:3001,http://localhost:3000,http://localhost:3001",
+        "https://localhost:3000,https://localhost:3001",
     )
     app.add_middleware(
         CORSMiddleware,
