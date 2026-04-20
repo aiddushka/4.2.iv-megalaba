@@ -86,6 +86,8 @@ services:
       - MQTT_PASSWORD=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
       - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
       - DEVICE_TOKEN_PEPPER=${DEVICE_TOKEN_PEPPER:?DEVICE_TOKEN_PEPPER is required}
+      - DEVICE_TOKEN_PLAINTEXT_MODE=${DEVICE_TOKEN_PLAINTEXT_MODE:-legacy}
+      - RUNTIME_TOKEN_STORE_DIR=${RUNTIME_TOKEN_STORE_DIR:-/runtime-token-store}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
@@ -94,6 +96,7 @@ services:
       - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
     volumes:
       - ../backend:/app
+      - runtime_token_store:/runtime-token-store
     networks:
       - default
       - greenhouse_iot_net
@@ -169,6 +172,7 @@ services:
 volumes:
   postgres_data:
   device_runtime_secrets:
+  runtime_token_store:
 
 networks:
   greenhouse_iot_net:

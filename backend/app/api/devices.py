@@ -99,10 +99,13 @@ def get_runtime_token_internal(
     device = device_service.get_device_by_uid(db=db, device_uid=device_uid)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+    token, token_version = device_token_service.get_runtime_token_for_device(device)
+    if not token:
+        raise HTTPException(status_code=409, detail="Runtime token is unavailable")
     return {
         "device_uid": device.device_uid,
-        "device_token": getattr(device, "device_token", None),
-        "device_token_version": int(getattr(device, "device_token_version", 1) or 1),
+        "device_token": token,
+        "device_token_version": int(token_version),
     }
 
 
