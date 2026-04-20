@@ -2,25 +2,23 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-**/.env
-!.env.example
-!**/.env.example
 
 venv/
-.env/
-
 node_modules/
-
 .idea
 .vscode
-
 .DS_Store
-
 *.log
 state.json
 postgres_data
-docker/mosquitto/certs/*.key
-docker/mosquitto/certs/*.csr
-docker/mosquitto/certs/*.srl
-docker/nginx/certs/*.key
-docker/nginx/certs/*.csr
+
+# Prod: .env и сертификаты в репо — правила ниже отключены
+# **/.env
+# !.env.example
+# !**/.env.example
+# .env/
+# docker/mosquitto/certs/*.key
+# docker/mosquitto/certs/*.csr
+# docker/mosquitto/certs/*.srl
+# docker/nginx/certs/*.key
+# docker/nginx/certs/*.csr
