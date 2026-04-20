@@ -26,15 +26,23 @@ services:
       mosquitto_passwd -b -c /mosquitto/data/passwords \"$${MQTT_USERNAME_BACKEND}\" \"$${MQTT_PASSWORD_BACKEND}\" &&
       mosquitto_passwd -b /mosquitto/data/passwords \"$${MQTT_USERNAME_DEVICE}\" \"$${MQTT_PASSWORD_DEVICE}\" &&
       cp /mosquitto/config/acl.conf /mosquitto/data/acl.conf &&
-      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf &&
+      mkdir -p /mosquitto/data/certs &&
+      cp /mosquitto/config/certs/ca.crt /mosquitto/data/certs/ca.crt &&
+      cp /mosquitto/config/certs/server.crt /mosquitto/data/certs/server.crt &&
+      cp /mosquitto/config/certs/server.key /mosquitto/data/certs/server.key &&
+      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key &&
       chmod 0700 /mosquitto/data/passwords /mosquitto/data/acl.conf &&
+      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/server.crt &&
+      chmod 0600 /mosquitto/data/certs/server.key &&
       exec mosquitto -c /mosquitto/config/mosquitto.conf
       "
     ports:
       - "1883:1883"
+      - "8883:8883"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
+      - ./mosquitto/certs:/mosquitto/config/certs:ro
     networks:
       - default
       - greenhouse_iot_net
