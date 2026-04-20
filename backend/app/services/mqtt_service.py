@@ -21,6 +21,10 @@ MQTT_ACTUATOR_STATE_TOPIC = os.getenv(
 )
 MQTT_HEARTBEAT_TOPIC = os.getenv("MQTT_HEARTBEAT_TOPIC", "greenhouse/devices/+/heartbeat")
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "greenhouse-backend")
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
+if not MQTT_USERNAME or not MQTT_PASSWORD:
+    raise RuntimeError("Missing required environment variables: MQTT_USERNAME/MQTT_PASSWORD")
 DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "").strip()
 if not DEVICE_TOKEN_PEPPER:
     raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_PEPPER")
@@ -160,6 +164,7 @@ def start_mqtt_listener() -> None:
     if _client is not None:
         return
     client = mqtt.Client(client_id=MQTT_CLIENT_ID)
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     client.on_connect = _on_connect
     client.on_message = _on_message
     client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)

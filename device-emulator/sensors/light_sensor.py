@@ -12,6 +12,8 @@ SEND_INTERVAL_SECONDS = 2
 NATURAL_DRIFT = 4.0
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
 MQTT_TOPIC = f"greenhouse/sensors/{DEVICE_UID}/data"
 HEARTBEAT_TOPIC = f"greenhouse/devices/{DEVICE_UID}/heartbeat"
 HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "10"))
@@ -20,6 +22,8 @@ HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "10"))
 if __name__ == "__main__":
     light_level = 400.0
     mqtt_client = mqtt.Client(client_id=f"{DEVICE_UID}-publisher")
+    if MQTT_USERNAME and MQTT_PASSWORD:
+        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     mqtt_client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
     mqtt_client.loop_start()
     last_heartbeat_at = 0.0

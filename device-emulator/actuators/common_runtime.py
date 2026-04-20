@@ -11,6 +11,8 @@ _token_holder = DeviceTokenHolder(DEVICE_UID, os.getenv("DEVICE_TOKEN", ""))
 ACTUATOR_TYPE = os.getenv("ACTUATOR_TYPE", "UNKNOWN_ACTUATOR")
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
 HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "10"))
 
 CMD_TOPIC = f"greenhouse/actuators/{DEVICE_UID}/cmd"
@@ -23,6 +25,8 @@ def run_actuator_listener(default_state: str = "OFF") -> None:
     last_heartbeat_at = 0.0
 
     client = mqtt.Client(client_id=f"{DEVICE_UID}-actuator")
+    if MQTT_USERNAME and MQTT_PASSWORD:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
     def on_connect(mqtt_client: mqtt.Client, _userdata, _flags, reason_code, _properties=None):
         if reason_code == 0:

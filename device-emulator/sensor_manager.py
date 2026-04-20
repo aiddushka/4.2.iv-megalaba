@@ -23,6 +23,8 @@ SENSOR_IP_RANGE = os.getenv("SENSOR_IP_RANGE", "172.28.1.10-172.28.1.250")
 ACTUATOR_IP_RANGE = os.getenv("ACTUATOR_IP_RANGE", "172.28.2.10-172.28.2.250")
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
 MQTT_BROKER_PORT = os.getenv("MQTT_BROKER_PORT", "1883")
+MQTT_USERNAME_DEVICE = os.getenv("MQTT_USERNAME_DEVICE", "").strip()
+MQTT_PASSWORD_DEVICE = os.getenv("MQTT_PASSWORD_DEVICE", "").strip()
 AUTO_RESTART_MAX_RETRIES = int(os.getenv("AUTO_RESTART_MAX_RETRIES", "5"))
 STOP_TIMEOUT_SECONDS = int(os.getenv("STOP_TIMEOUT_SECONDS", "10"))
 DEVICE_GROUP_PROJECT = os.getenv("DEVICE_GROUP_PROJECT", "devices")
@@ -212,6 +214,8 @@ def _ensure_created(
             "BACKEND_URL": BACKEND_URL,
             "MQTT_BROKER_HOST": MQTT_BROKER_HOST,
             "MQTT_BROKER_PORT": str(MQTT_BROKER_PORT),
+            "MQTT_USERNAME": MQTT_USERNAME_DEVICE,
+            "MQTT_PASSWORD": MQTT_PASSWORD_DEVICE,
             "ACTUATOR_TYPE": device_type,
             "RUNTIME_SECRETS_DIR": "/runtime-secrets",
         }

@@ -14,8 +14,23 @@ services:
   mqtt-broker:
     image: eclipse-mosquitto:2
     container_name: greenhouse_mqtt_broker
+    environment:
+      - MQTT_USERNAME_BACKEND=${MQTT_USERNAME_BACKEND:-backend_user}
+      - MQTT_PASSWORD_BACKEND=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
+      - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
+      - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
+    command: >
+      sh -c "
+      mosquitto_passwd -b -c /mosquitto/data/passwords \"$${MQTT_USERNAME_BACKEND}\" \"$${MQTT_PASSWORD_BACKEND}\" &&
+      mosquitto_passwd -b /mosquitto/data/passwords \"$${MQTT_USERNAME_DEVICE}\" \"$${MQTT_PASSWORD_DEVICE}\" &&
+      chmod 644 /mosquitto/data/passwords &&
+      exec mosquitto -c /mosquitto/config/mosquitto.conf
+      "
     ports:
       - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
     networks:
       - default
       - greenhouse_iot_net
@@ -66,6 +81,8 @@ services:
       - MQTT_ACTUATOR_STATE_TOPIC=${MQTT_ACTUATOR_STATE_TOPIC:-greenhouse/actuators/+/state}
       - MQTT_HEARTBEAT_TOPIC=${MQTT_HEARTBEAT_TOPIC:-greenhouse/devices/+/heartbeat}
       - MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL=${MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL:-30}
+      - MQTT_USERNAME=${MQTT_USERNAME_BACKEND:-backend_user}
+      - MQTT_PASSWORD=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
       - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
       - DEVICE_TOKEN_PEPPER=${DEVICE_TOKEN_PEPPER:?DEVICE_TOKEN_PEPPER is required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
@@ -124,6 +141,8 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
+      - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
       - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
       - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-5}
       - HEALTHCHECK_INTERVAL_SECONDS=${HEALTHCHECK_INTERVAL_SECONDS:-10}
