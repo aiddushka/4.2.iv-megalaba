@@ -1,5 +1,6 @@
 import json
 import os
+import ssl
 import threading
 import time
 from typing import Any
@@ -23,8 +24,13 @@ MQTT_HEARTBEAT_TOPIC = os.getenv("MQTT_HEARTBEAT_TOPIC", "greenhouse/devices/+/h
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "greenhouse-backend")
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip()
+MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
+MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
+MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
 if not MQTT_USERNAME or not MQTT_PASSWORD:
     raise RuntimeError("Missing required environment variables: MQTT_USERNAME/MQTT_PASSWORD")
+if MQTT_TLS_ENABLED and not MQTT_TLS_CA_CERT:
+    raise RuntimeError("Missing required environment variable: MQTT_TLS_CA_CERT when MQTT_TLS_ENABLED=true")
 DEVICE_TOKEN_PEPPER = os.getenv("DEVICE_TOKEN_PEPPER", "").strip()
 if not DEVICE_TOKEN_PEPPER:
     raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_PEPPER")
@@ -208,6 +214,10 @@ def start_mqtt_listener() -> None:
         return
     client = mqtt.Client(client_id=MQTT_CLIENT_ID)
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    if MQTT_TLS_ENABLED:
+        client.tls_set(ca_certs=MQTT_TLS_CA_CERT, cert_reqs=ssl.CERT_REQUIRED)
+        if MQTT_TLS_INSECURE:
+            client.tls_insecure_set(True)
     client.on_connect = _on_connect
     client.on_disconnect = _on_disconnect
     client.on_message = _on_message
