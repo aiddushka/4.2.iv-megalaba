@@ -14,8 +14,39 @@ services:
   mqtt-broker:
     image: eclipse-mosquitto:2
     container_name: greenhouse_mqtt_broker
+    user: "0:0"
+    environment:
+      - MQTT_USERNAME_BACKEND=${MQTT_USERNAME_BACKEND:-backend_user}
+      - MQTT_PASSWORD_BACKEND=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
+      - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
+      - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
+    command: >
+      sh -c "
+      rm -f /mosquitto/data/passwords &&
+      mosquitto_passwd -b -c /mosquitto/data/passwords \"$${MQTT_USERNAME_BACKEND}\" \"$${MQTT_PASSWORD_BACKEND}\" &&
+      mosquitto_passwd -b /mosquitto/data/passwords \"$${MQTT_USERNAME_DEVICE}\" \"$${MQTT_PASSWORD_DEVICE}\" &&
+      cp /mosquitto/config/acl.conf /mosquitto/data/acl.conf &&
+      mkdir -p /mosquitto/data/certs &&
+      cp /mosquitto/config/certs/ca.crt /mosquitto/data/certs/ca.crt &&
+      cp /mosquitto/config/certs/device-ca.crt /mosquitto/data/certs/device-ca.crt &&
+      cp /mosquitto/config/certs/device-ca.crl /mosquitto/data/certs/device-ca.crl &&
+      cp /mosquitto/config/certs/server.crt /mosquitto/data/certs/server.crt &&
+      cp /mosquitto/config/certs/server.key /mosquitto/data/certs/server.key &&
+      cp /mosquitto/config/certs/backend_client.crt /mosquitto/data/certs/backend_client.crt &&
+      cp /mosquitto/config/certs/backend_client.key /mosquitto/data/certs/backend_client.key &&
+      chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data/acl.conf /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/device-ca.crl /mosquitto/data/certs/server.crt /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.crt /mosquitto/data/certs/backend_client.key &&
+      chmod 0700 /mosquitto/data/passwords /mosquitto/data/acl.conf &&
+      chmod 0644 /mosquitto/data/certs/ca.crt /mosquitto/data/certs/device-ca.crt /mosquitto/data/certs/device-ca.crl /mosquitto/data/certs/server.crt /mosquitto/data/certs/backend_client.crt &&
+      chmod 0600 /mosquitto/data/certs/server.key /mosquitto/data/certs/backend_client.key &&
+      exec mosquitto -c /mosquitto/config/mosquitto.conf
+      "
     ports:
-      - "1883:1883"
+      - "8883:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl.conf:/mosquitto/config/acl.conf:ro
+      - ./mosquitto/certs:/mosquitto/config/certs:ro
+      - mqtt_shared_certs:/mosquitto/data/certs
     networks:
       - default
       - greenhouse_iot_net
@@ -24,16 +55,16 @@ services:
     image: postgres:15
     container_name: greenhouse_postgres
     environment:
-      POSTGRES_USER: greenhouse
-      POSTGRES_PASSWORD: greenhouse
-      POSTGRES_DB: greenhouse
+      POSTGRES_USER: ${POSTGRES_USER:-greenhouse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenhouse}
+      POSTGRES_DB: ${POSTGRES_DB:-greenhouse}
     ports:
       - "5432:5432"
     volumes:
       - ./database:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U greenhouse -d greenhouse"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-greenhouse} -d ${POSTGRES_DB:-greenhouse}"]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -48,18 +79,62 @@ services:
         condition: service_healthy
       mqtt-broker:
         condition: service_started
-    ports:
-      - "8000:8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       # - SQL_ECHO=true
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
+      - POSTGRES_USER=${POSTGRES_USER:-greenhouse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-greenhouse}
+      - POSTGRES_DB=${POSTGRES_DB:-greenhouse}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - SQL_ECHO=${SQL_ECHO:-false}
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT_BACKEND:-8883}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-greenhouse-backend}
+      - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_BACKEND:-true}
+      - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_BACKEND:-/mqtt-certs/ca.crt}
+      - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_BACKEND:-false}
+      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_BACKEND:-/mqtt-certs/backend_client.crt}
+      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_BACKEND:-/mqtt-certs/backend_client.key}
+      - MQTT_SENSOR_TOPIC=${MQTT_SENSOR_TOPIC:-greenhouse/sensors/+/data}
+      - MQTT_ACTUATOR_STATE_TOPIC=${MQTT_ACTUATOR_STATE_TOPIC:-greenhouse/actuators/+/state}
+      - MQTT_HEARTBEAT_TOPIC=${MQTT_HEARTBEAT_TOPIC:-greenhouse/devices/+/heartbeat}
+      - MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL=${MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL:-30}
+      - HEARTBEAT_STALE_SECONDS=${HEARTBEAT_STALE_SECONDS:-30}
+      - MQTT_USERNAME=${MQTT_USERNAME_BACKEND:-backend_user}
+      - MQTT_PASSWORD=${MQTT_PASSWORD_BACKEND:?MQTT_PASSWORD_BACKEND is required}
+      - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
+      - DEVICE_TOKEN_PEPPER=${DEVICE_TOKEN_PEPPER:?DEVICE_TOKEN_PEPPER is required}
+      - RUNTIME_TOKEN_STORE_DIR=${RUNTIME_TOKEN_STORE_DIR:-/runtime-token-store}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      - BOOTSTRAP_ADMIN_ENABLED=${BOOTSTRAP_ADMIN_ENABLED:-false}
+      - BOOTSTRAP_ADMIN_USERNAME=${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
     volumes:
       - ../backend:/app
+      - runtime_token_store:/runtime-token-store
+      - mqtt_shared_certs:/mqtt-certs:ro
     networks:
       - default
       - greenhouse_iot_net
+
+  backend-https-proxy:
+    image: nginx:1.27-alpine
+    container_name: greenhouse_backend_https_proxy
+    depends_on:
+      - backend
+      - frontend-dashboard
+      - frontend-device-config
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - default
 
   frontend-dashboard:
     build:
@@ -68,8 +143,6 @@ services:
     container_name: greenhouse_frontend_dashboard
     depends_on:
       - backend
-    ports:
-      - "3000:5173"
     command: npm run dev -- --host 0.0.0.0 --port 5173
     volumes:
       - /app/node_modules
@@ -82,8 +155,6 @@ services:
     container_name: greenhouse_frontend_device_config
     depends_on:
       - backend
-    ports:
-      - "3001:5174"
     command: npm run dev -- --host 0.0.0.0 --port 5174
     volumes:
       - /app/node_modules
@@ -102,22 +173,40 @@ services:
       mqtt-broker:
         condition: service_started
     environment:
-      - BACKEND_URL=http://backend:8000
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-      - POLL_INTERVAL_SECONDS=5
-      - HEALTHCHECK_INTERVAL_SECONDS=10
-      - STATE_FILE_PATH=/state/state.json
-      - DEVICE_NETWORK_NAME=greenhouse_iot_net
-      - DEVICE_IMAGE=docker-device-runtime
-      - DEVICE_GROUP_PROJECT=devices
-      - DEVICE_GROUP_SERVICE=device-runtime
-      - SENSOR_IP_RANGE=172.28.1.10-172.28.1.250
-      - ACTUATOR_IP_RANGE=172.28.2.10-172.28.2.250
-      - AUTO_RESTART_MAX_RETRIES=5
-      - STOP_TIMEOUT_SECONDS=10
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mqtt-broker}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT_DEVICE:-8883}
+      - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED_DEVICE:-true}
+      - MQTT_TLS_CA_CERT=${MQTT_TLS_CA_CERT_DEVICE:-/mqtt-certs/ca.crt}
+      - MQTT_TLS_INSECURE=${MQTT_TLS_INSECURE_DEVICE:-false}
+      - MQTT_TLS_CLIENT_CERT=${MQTT_TLS_CLIENT_CERT_DEVICE:-}
+      - MQTT_TLS_CLIENT_KEY=${MQTT_TLS_CLIENT_KEY_DEVICE:-}
+      - MQTT_SHARED_CERTS_VOLUME=${MQTT_SHARED_CERTS_VOLUME:-greenhouse_mqtt_shared_certs}
+      - MQTT_CERTS_RW_DIR=${MQTT_CERTS_RW_DIR:-/mqtt-certs-rw}
+      - MQTT_DEVICE_CA_CERT_PATH=${MQTT_DEVICE_CA_CERT_PATH:-/mosquitto-config-certs/device-ca.crt}
+      - MQTT_DEVICE_CA_KEY_PATH=${MQTT_DEVICE_CA_KEY_PATH:-/mosquitto-config-certs/device-ca.key}
+      - MQTT_DEVICE_CERTS_SUBDIR=${MQTT_DEVICE_CERTS_SUBDIR:-devices}
+      - MQTT_USERNAME_DEVICE=${MQTT_USERNAME_DEVICE:-device_user}
+      - MQTT_PASSWORD_DEVICE=${MQTT_PASSWORD_DEVICE:?MQTT_PASSWORD_DEVICE is required}
+      - MANAGER_KEY=${MANAGER_KEY:?MANAGER_KEY is required}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-5}
+      - HEALTHCHECK_INTERVAL_SECONDS=${HEALTHCHECK_INTERVAL_SECONDS:-10}
+      - STATE_FILE_PATH=${STATE_FILE_PATH:-/state/state.json}
+      - RUNTIME_SECRETS_DIR=${RUNTIME_SECRETS_DIR:-/runtime-secrets}
+      - DEVICE_RUNTIME_SECRETS_VOLUME=${DEVICE_RUNTIME_SECRETS_VOLUME:-greenhouse_device_runtime_secrets}
+      - DEVICE_NETWORK_NAME=${DEVICE_NETWORK_NAME:-greenhouse_iot_net}
+      - DEVICE_IMAGE=${DEVICE_IMAGE:-docker-device-runtime}
+      - DEVICE_GROUP_PROJECT=${DEVICE_GROUP_PROJECT:-devices}
+      - DEVICE_GROUP_SERVICE=${DEVICE_GROUP_SERVICE:-device-runtime}
+      - SENSOR_IP_RANGE=${SENSOR_IP_RANGE:-172.28.1.10-172.28.1.250}
+      - ACTUATOR_IP_RANGE=${ACTUATOR_IP_RANGE:-172.28.2.10-172.28.2.250}
+      - AUTO_RESTART_MAX_RETRIES=${AUTO_RESTART_MAX_RETRIES:-5}
+      - STOP_TIMEOUT_SECONDS=${STOP_TIMEOUT_SECONDS:-10}
     volumes:
       - ../device-emulator:/state
+      - device_runtime_secrets:/runtime-secrets
+      - mqtt_shared_certs:/mqtt-certs-rw
+      - ./mosquitto/certs:/mosquitto-config-certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - default
@@ -125,6 +214,9 @@ services:
 
 volumes:
   postgres_data:
+  device_runtime_secrets:
+  runtime_token_store:
+  mqtt_shared_certs:
 
 networks:
   greenhouse_iot_net:

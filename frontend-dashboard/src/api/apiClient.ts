@@ -2,7 +2,7 @@ import axios from "axios";
 import { getStoredToken, clearStoredToken } from "./authApi";
 
 export const apiClient = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: "/api",
   headers: {
     "Content-Type": "application/json",
   },

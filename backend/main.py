@@ -1,8 +1,21 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from pathlib import Path
+import os
+
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _parse_csv_env(name: str, default: str) -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
 from app.api import actuators, auth, automation, devices, sensors, dashboard
 from app.database.base import Base
@@ -12,9 +25,9 @@ import app.models.device_link  # noqa: F401
 
 
 def create_app() -> FastAPI:
-    # создаем таблицы в БД
+    # СЃРѕР·РґР°РµРј С‚Р°Р±Р»РёС†С‹ РІ Р‘Р”
     Base.metadata.create_all(bind=engine)
-    # миграция: добавить can_view_dashboard для существующих БД
+    # РјРёРіСЂР°С†РёСЏ: РґРѕР±Р°РІРёС‚СЊ can_view_dashboard РґР»СЏ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… Р‘Р”
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -24,7 +37,7 @@ def create_app() -> FastAPI:
             )
     except Exception:
         pass
-    # миграция: добавить новые поля devices для расширенной конфигурации
+    # РјРёРіСЂР°С†РёСЏ: РґРѕР±Р°РІРёС‚СЊ РЅРѕРІС‹Рµ РїРѕР»СЏ devices РґР»СЏ СЂР°СЃС€РёСЂРµРЅРЅРѕР№ РєРѕРЅС„РёРіСѓСЂР°С†РёРё
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -43,6 +56,21 @@ def create_app() -> FastAPI:
             )
             conn.execute(
                 text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_hash VARCHAR(128)"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_version INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_revoked_at TIMESTAMP"
+                )
+            )
+            conn.execute(
+                text(
                     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_maintenance TIMESTAMP"
                 )
             )
@@ -54,6 +82,7 @@ def create_app() -> FastAPI:
             conn.execute(
                 text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS change_history JSON")
             )
+            conn.execute(text("ALTER TABLE devices DROP COLUMN IF EXISTS device_token"))
             conn.execute(
                 text("ALTER TABLE devices ALTER COLUMN status SET DEFAULT 'active'")
             )
@@ -90,7 +119,7 @@ def create_app() -> FastAPI:
     except Exception:
         pass
 
-    # Учётная запись админа по умолчанию (admin / 123)
+    # Bootstrap admin account can be configured via env.
     try:
         from app.database.session import SessionLocal
         from app.models.user import User
@@ -98,8 +127,14 @@ def create_app() -> FastAPI:
 
         db = SessionLocal()
         try:
-            if db.query(User).filter(User.username == "admin").first() is None:
-                auth_service.create_user(db, "admin", "123", is_admin=True)
+            bootstrap_enabled = os.getenv("BOOTSTRAP_ADMIN_ENABLED", "false").lower() == "true"
+            bootstrap_user = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
+            bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+            if bootstrap_enabled:
+                if not bootstrap_user or not bootstrap_password:
+                    raise RuntimeError("BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD are required when BOOTSTRAP_ADMIN_ENABLED=true")
+                if db.query(User).filter(User.username == bootstrap_user).first() is None:
+                    auth_service.create_user(db, bootstrap_user, bootstrap_password, is_admin=True)
         finally:
             db.close()
     except Exception:
@@ -111,15 +146,23 @@ def create_app() -> FastAPI:
     images_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
 
+    cors_origins = _parse_csv_env(
+        "CORS_ALLOW_ORIGINS",
+        "https://localhost:8443",
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # подключаем все роутеры
+    # Service-to-service key for sensor-emulator-manager internal calls (e.g. runtime secrets).
+    app.state.manager_key = _require_env("MANAGER_KEY")
+    app.state.device_token_pepper = _require_env("DEVICE_TOKEN_PEPPER")
+
+    # РїРѕРґРєР»СЋС‡Р°РµРј РІСЃРµ СЂРѕСѓС‚РµСЂС‹
     app.include_router(auth.router)
     app.include_router(devices.router)
     app.include_router(sensors.router)
@@ -143,3 +186,5 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+

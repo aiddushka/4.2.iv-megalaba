@@ -2,13 +2,15 @@
 
 В проекте два фронтенд-сайта:
 
-- **Сайт №1 — Dashboard** (`frontend-dashboard`, порт **3000**)  
+- **Сайт №1 — Dashboard** (`frontend-dashboard`, URL **`https://localhost:8443/`**)  
   Используется после входа в систему. Показывает «доску» теплицы: датчики, актуаторы, состояние устройств.  
   - **Администратор**: управляет устройствами, назначает «неустановленные» устройства на локацию, может редактировать конфигурацию, создавать связи датчик → актуатор.
   - **Обычный пользователь (работник)**: в зависимости от прав может смотреть дашборд и открывать карточки устройств (просмотр без управления).
 
-- **Сайт №2 — Device Configurator** (`frontend-device-config`, порт **3001**)  
+- **Сайт №2 — Device Configurator** (`frontend-device-config`, URL **`https://localhost:8443/config/`**)  
   Используется «на месте» (как будто ноутбук/флешка у устройства). Нужен для регистрации устройства в системе и первичного описания подключения (контроллер, GPIO, шина, компоненты) до того, как администратор «установит» устройство на доску.
+
+Оба сайта отдаются через **Nginx** с TLS (порт **8443**); Vite в контейнерах слушает **5173** / **5174** только во внутренней сети Docker. Запросы к API с браузера идут на тот же хост с префиксом **`/api/`** (см. `docker/nginx/nginx.conf`).
 
 ---
 
@@ -17,7 +19,7 @@
 Основные модули:
 
 - **API**
-  - `src/api/apiClient.ts` — общий клиент для запросов к backend (JWT, обработка 401).
+  - `src/api/apiClient.ts` — общий клиент для запросов к backend (`baseURL: /api`, JWT, обработка 401).
   - `src/api/authApi.ts` — логин/регистрация/`me`.
   - `src/api/devicesApi.ts` — устройства (assigned/unassigned, assign, update, fetch by uid, delete).
   - `src/api/dashboardApi.ts` — агрегированное состояние `/dashboard/state`.
@@ -41,9 +43,9 @@
 Основные модули:
 
 - **API**
-  - `src/api/apiClient.ts` — клиент запросов к backend (без авторизации).
-  - `src/api/devicesApi.ts` — регистрация устройства через `POST /devices/register`.
-  - `src/api/automationApi.ts` — создание связи датчик → актуатор через `POST /automation/links`.
+  - `src/api/apiClient.ts` — клиент запросов к backend (`baseURL: /api`, без авторизации).
+  - `src/api/devicesApi.ts` — регистрация устройства через `POST /api/devices/register` (на стороне FastAPI — `POST /devices/register`).
+  - `src/api/automationApi.ts` — создание связи датчик → актуатор через `POST /api/automation/links`.
 - **Страницы**
   - `src/pages/RegisterDevicePage.tsx` — экран регистрации устройства через форму.
 - **Компоненты**
@@ -126,10 +128,18 @@
 docker compose up --build
 ```
 
-Порты:
-- backend: **8000**
-- dashboard: **3000**
-- device-config: **3001**
+Доступ с хоста (как в `README.md`):
+
+- **HTTPS (всё в одном месте)**: **`https://localhost:8443`** — дашборд `/`, конфигуратор `/config/`, API `/api/...`, Swagger `/docs`
+- **Редирект HTTP → HTTPS**: **`http://localhost:8080`** → `https://localhost:8443/...`
+- **PostgreSQL**: **5432**
+- **Backend напрямую с хоста не публикуется** (только `backend:8000` внутри Compose); **MQTT TLS**: **8883**
+
+Сертификат для dev: `docker/nginx/certs/localhost.crt` и ключ `localhost.key` (ключ в `.gitignore`). Сгенерировать заново можно так (из каталога `docker/nginx/certs`, нужен OpenSSL или Docker):
+
+```bash
+docker run --rm -v "$(pwd):/work" -w /work alpine:3.20 sh -c "apk add --no-cache openssl >/dev/null && openssl req -x509 -nodes -newkey rsa:2048 -keyout localhost.key -out localhost.crt -days 825 -config localhost-openssl.cnf"
+```
 
 ### Остановка и удаление контейнеров/томов
 

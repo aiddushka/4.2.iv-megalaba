@@ -32,10 +32,10 @@ export function RegisterDevicePage() {
           active: true,
         });
       }
-      setResult(`Устройство зарегистрировано: id=${data.id}, status=${data.status}`);
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
+      setResult(
+        `Устройство зарегистрировано: id=${data.id}, status=${data.status}\n` +
+          `Токен устройства: ${data.device_token}`,
+      );
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка при регистрации устройства");
     }
@@ -65,6 +65,7 @@ export function RegisterDevicePage() {
             background: "rgba(22,163,74,0.15)",
             color: "#bbf7d0",
             fontSize: "0.9rem",
+            whiteSpace: "pre-wrap",
           }}
         >
           {result}

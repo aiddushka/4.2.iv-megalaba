@@ -6,8 +6,9 @@
 
 - **Backend**: FastAPI + SQLAlchemy + JWT (`backend/main.py`)
 - **PostgreSQL**: хранение пользователей, устройств, телеметрии, состояния актуаторов и связей
-- **Frontend #1 (Dashboard)**: `frontend-dashboard` (Vite/React, порт 3000)
-- **Frontend #2 (Device Configurator)**: `frontend-device-config` (Vite/React, порт 3001)
+- **Frontend #1 (Dashboard)**: `frontend-dashboard` (Vite/React) — снаружи **`https://localhost:8443/`** (через Nginx)
+- **Frontend #2 (Device Configurator)**: `frontend-device-config` (Vite/React) — снаружи **`https://localhost:8443/config/`** (через Nginx)
+- **Nginx (TLS)**: `greenhouse_backend_https_proxy` — терминирует HTTPS, отдаёт оба Vite и проксирует **`/api/`** → FastAPI
 - **Эмуляторы устройств**: `device-emulator`
   - **менеджер сенсоров** (`sensor_manager.py`) — запускается в Docker, стартует сенсорные скрипты для активных датчиков
   - **актуаторы** (`device-emulator/actuators/*.py`) — скрипты для ручного тестирования
@@ -16,23 +17,24 @@
 
 Сервисы в `docker/docker-compose.yml`:
 
-- **backend**: `http://localhost:8000` (uvicorn `main:app`)
+- **backend**: только внутри Docker-сети `http://backend:8000` (uvicorn `main:app`); с хоста API доступен как **`https://localhost:8443/api/...`** (префикс `/api/` снимает Nginx и проксирует на корень FastAPI)
 - **postgres**: `localhost:5432`
-- **frontend-dashboard**: `http://localhost:3000` (внутри контейнера Vite на `5173`)
-- **frontend-device-config**: `http://localhost:3001` (внутри контейнера Vite на `5174`)
+- **greenhouse_backend_https_proxy**: с хоста **`https://localhost:8443`** (TLS), редирект с **`http://localhost:8080`**
+- **frontend-dashboard**: Vite в контейнере на `5173`, снаружи только через Nginx на **`/`**
+- **frontend-device-config**: Vite в контейнере на `5174`, снаружи только через Nginx на **`/config/`**
 - **sensor-emulator-manager**: без порта, общается с backend по `http://backend:8000`
 
 ## Поток данных (end-to-end)
 
 ### 1) Регистрация устройства
 
-1. Оператор открывает Device Configurator (порт 3001)
-2. Форма отправляет `POST /devices/register` (без авторизации)
+1. Оператор открывает Device Configurator (`https://localhost:8443/config/`)
+2. Форма отправляет `POST /api/devices/register` (без авторизации; с точки зрения FastAPI это `POST /devices/register`)
 3. Устройство создаётся со статусом `unassigned`
 
 ### 2) “Установка” устройства (активация)
 
-1. Админ заходит на Dashboard (порт 3000) и авторизуется
+1. Админ заходит на Dashboard (`https://localhost:8443/`) и авторизуется
 2. Админ получает `GET /devices/unassigned`
 3. Админ выполняет `POST /devices/assign` → устройство получает `location` и `status=active`
 

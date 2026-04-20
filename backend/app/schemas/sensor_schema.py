@@ -7,6 +7,7 @@ class SensorDataCreate(BaseModel):
     device_uid: str
     value: float
     sensor_type: str | None = None
+    device_token: str | None = None
 
 
 class SensorDataOut(BaseModel):
