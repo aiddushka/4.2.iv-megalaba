@@ -62,13 +62,12 @@ def _require_manager_key(request: Request) -> None:
 def get_orchestration_state_internal(request: Request, db: Session = Depends(get_db)):
     """
     INTERNAL endpoint for sensor-emulator-manager.
-    Same as /devices/orchestration-state, but includes per-device token for runtime.
+    Same as /devices/orchestration-state, plus token version metadata for runtime sync.
     Protected by X-Manager-Key header.
     """
     _require_manager_key(request)
     devices = device_service.get_all_devices(db)
-    # Note: internal endpoint returns raw device_token for runtime injection.
-    # In production you'd use TLS + broker auth or encrypted secrets; for lab we store token in DB.
+    # Internal state intentionally does not expose raw device token.
     rows: list[dict] = []
     for d in devices:
         rows.append(
@@ -77,7 +76,6 @@ def get_orchestration_state_internal(request: Request, db: Session = Depends(get
                 "device_type": d.device_type,
                 "status": d.status,
                 "desired_runtime_state": "stopped" if d.status == "disabled" else "running",
-                "device_token": getattr(d, "device_token", None),
                 "device_token_version": int(getattr(d, "device_token_version", 1) or 1),
             }
         )

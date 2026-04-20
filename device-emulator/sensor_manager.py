@@ -64,7 +64,13 @@ def _is_sensor(device_type: str) -> bool:
     return "SENSOR" in (device_type or "")
 
 
-def _container_name(device_uid: str) -> str:
+def _container_name(device_uid: str, device_type: str) -> str:
+    safe_uid = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
+    role = "sensor" if _is_sensor(device_type) else "actuator"
+    return f"greenhouse_{role}_{safe_uid}".lower()
+
+
+def _legacy_container_name(device_uid: str) -> str:
     safe_uid = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
     return f"greenhouse_device_{safe_uid}".lower()
 
@@ -82,7 +88,12 @@ def _sync_runtime_secret_file(
     if not RUNTIME_SECRETS_DIR:
         return
     ver = int(device_token_version if device_token_version is not None else 0)
-    tok = device_token if device_token is not None else ""
+    if device_token is None:
+        # Commit #1 transition: internal orchestration state may omit token.
+        # Keep already synced runtime token; only record observed version.
+        info["observed_device_token_version"] = ver
+        return
+    tok = device_token
     if info.get("synced_device_token_version") == ver and info.get("synced_device_token") == tok:
         return
     base = Path(RUNTIME_SECRETS_DIR)
@@ -103,6 +114,7 @@ def _device_labels(device_uid: str, device_type: str) -> dict[str, str]:
         "managed_by": "sensor_manager",
         "domain": "device",
         "group": "devices",
+        "device_role": "sensor" if _is_sensor(device_type) else "actuator",
         "device_uid": device_uid,
         "device_type": device_type,
         # Compose-style labels improve grouping in Docker Desktop UI.
@@ -203,14 +215,38 @@ def _ensure_created(
     devices_state = state["devices"]
     info = devices_state.setdefault(device_uid, {})
     assigned_ip = _allocate_ip(device_uid, device_type, devices_state)
-    container_name = info.get("container_name") or _container_name(device_uid)
+    desired_name = _container_name(device_uid, device_type)
+    stored_name = str(info.get("container_name") or "").strip()
+    # Migrate old naming persisted in state.json: greenhouse_device_<uid> -> greenhouse_sensor/actuator_<uid>
+    if stored_name.startswith("greenhouse_device_"):
+        info["container_name"] = desired_name
+        stored_name = desired_name
+    container_name = stored_name or desired_name
     container = _get_container(client, container_name)
+
+    # Backward compatibility: if old naming scheme is used, rename in-place.
+    if container is None:
+        legacy_name = _legacy_container_name(device_uid)
+        legacy_container = _get_container(client, legacy_name)
+        if legacy_container is not None:
+            legacy_container.rename(desired_name)
+            container_name = desired_name
+            info["container_name"] = desired_name
+            container = _get_container(client, desired_name)
+            print(
+                f"[manager] renamed container {legacy_name} -> {desired_name} "
+                f"for {device_uid}"
+            )
 
     if container is None:
         command = _device_command(device_type)
+        effective_token = device_token
+        if effective_token is None:
+            remembered = str(info.get("synced_device_token") or "").strip()
+            effective_token = remembered if remembered else None
         env = {
             "DEVICE_UID": device_uid,
-            "DEVICE_TOKEN": device_token,
+            "DEVICE_TOKEN": effective_token,
             "BACKEND_URL": BACKEND_URL,
             "MQTT_BROKER_HOST": MQTT_BROKER_HOST,
             "MQTT_BROKER_PORT": str(MQTT_BROKER_PORT),
@@ -286,8 +322,12 @@ def _ensure_removed(client: docker.DockerClient, state: dict, device_uid: str) -
     info = state["devices"].get(device_uid)
     if not info:
         return
-    container_name = info.get("container_name") or _container_name(device_uid)
+    container_name = info.get("container_name") or _container_name(
+        device_uid, str(info.get("device_type", ""))
+    )
     container = _get_container(client, container_name)
+    if container is None:
+        container = _get_container(client, _legacy_container_name(device_uid))
     if container is not None:
         try:
             container.stop(timeout=STOP_TIMEOUT_SECONDS)
@@ -309,7 +349,8 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
     device_uid = desired.get("device_uid")
     device_type = desired.get("device_type")
     desired_runtime_state = desired.get("desired_runtime_state", "stopped")
-    device_token = desired.get("device_token")
+    token_is_present = "device_token" in desired
+    device_token = desired.get("device_token") if token_is_present else None
     device_token_version = desired.get("device_token_version")
     if not device_uid or not device_type:
         return
@@ -331,8 +372,12 @@ def _reconcile_device(client: docker.DockerClient, network, state: dict, desired
 
 def _health_check(client: docker.DockerClient, state: dict) -> None:
     for device_uid, info in list(state.get("devices", {}).items()):
-        container_name = info.get("container_name") or _container_name(device_uid)
+        container_name = info.get("container_name") or _container_name(
+            device_uid, str(info.get("device_type", ""))
+        )
         container = _get_container(client, container_name)
+        if container is None:
+            container = _get_container(client, _legacy_container_name(device_uid))
         if container is None:
             info["actual_runtime_state"] = "missing"
             info["last_error"] = "container not found"
