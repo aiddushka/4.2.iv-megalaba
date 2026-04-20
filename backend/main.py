@@ -56,11 +56,6 @@ def create_app() -> FastAPI:
             )
             conn.execute(
                 text(
-                    "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token VARCHAR(128)"
-                )
-            )
-            conn.execute(
-                text(
                     "ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_token_version INTEGER NOT NULL DEFAULT 1"
                 )
             )
@@ -82,6 +77,7 @@ def create_app() -> FastAPI:
             conn.execute(
                 text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS change_history JSON")
             )
+            conn.execute(text("ALTER TABLE devices DROP COLUMN IF EXISTS device_token"))
             conn.execute(
                 text("ALTER TABLE devices ALTER COLUMN status SET DEFAULT 'active'")
             )
@@ -122,13 +118,10 @@ def create_app() -> FastAPI:
     try:
         from app.database.session import SessionLocal
         from app.models.user import User
-        from app.services import auth_service, device_token_service
+        from app.services import auth_service
 
         db = SessionLocal()
         try:
-            migrated = device_token_service.migrate_plaintext_tokens_to_runtime_store(db)
-            if migrated:
-                print(f"[token] migrated {migrated} plaintext device tokens to runtime-token-store")
             bootstrap_enabled = os.getenv("BOOTSTRAP_ADMIN_ENABLED", "false").lower() == "true"
             bootstrap_user = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
             bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()

@@ -21,7 +21,6 @@ class Device(Base):
     location = Column(String(255), nullable=True)
     status = Column(String(50), default="active")
     accepts_data = Column(Boolean, nullable=False, default=True)
-    device_token = Column(String(128), nullable=True)
     device_token_hash = Column(String(128), nullable=True)
     device_token_version = Column(Integer, nullable=False, default=1)
     device_token_revoked_at = Column(DateTime, nullable=True)

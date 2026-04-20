@@ -10,14 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.device import Device
 
-DEVICE_TOKEN_PLAINTEXT_MODE = os.getenv("DEVICE_TOKEN_PLAINTEXT_MODE", "legacy").strip().lower()
 RUNTIME_TOKEN_STORE_DIR = Path(os.getenv("RUNTIME_TOKEN_STORE_DIR", "/runtime-token-store")).resolve()
-_legacy_runtime_fallback_warned: set[str] = set()
-_ALLOWED_PLAINTEXT_MODES = {"legacy", "disabled"}
-if DEVICE_TOKEN_PLAINTEXT_MODE not in _ALLOWED_PLAINTEXT_MODES:
-    raise RuntimeError(
-        "DEVICE_TOKEN_PLAINTEXT_MODE must be one of: legacy, disabled"
-    )
 
 
 def generate_device_token() -> str:
@@ -73,42 +66,10 @@ def get_runtime_token_for_device(device: Device) -> tuple[str | None, int]:
     db_version = int(getattr(device, "device_token_version", 1) or 1)
     if token:
         return token, int(version_from_file if version_from_file is not None else db_version)
-    if DEVICE_TOKEN_PLAINTEXT_MODE == "legacy":
-        token_db = getattr(device, "device_token", None)
-        if token_db and device.device_uid not in _legacy_runtime_fallback_warned:
-            _legacy_runtime_fallback_warned.add(device.device_uid)
-            print(
-                f"[token] runtime token fallback to DB plaintext for {device.device_uid!r}; "
-                "migrate to runtime-token-store and set DEVICE_TOKEN_PLAINTEXT_MODE=disabled"
-            )
-        return token_db, db_version
     return None, db_version
 
 
-def migrate_plaintext_tokens_to_runtime_store(db: Session) -> int:
-    """
-    One-time safety migration for disabled plaintext mode:
-    copy plaintext token from DB into runtime-token-store, then null DB plaintext.
-    """
-    if DEVICE_TOKEN_PLAINTEXT_MODE != "disabled":
-        return 0
-    changed = 0
-    devices = db.query(Device).all()
-    for device in devices:
-        plaintext = getattr(device, "device_token", None)
-        if not plaintext:
-            continue
-        version = int(getattr(device, "device_token_version", 1) or 1)
-        _persist_runtime_token(device.device_uid, plaintext, version)
-        device.device_token = None
-        changed += 1
-    if changed:
-        db.commit()
-    return changed
-
-
 def set_device_token(db: Session, device: Device, token: str, pepper: str) -> None:
-    device.device_token = token if DEVICE_TOKEN_PLAINTEXT_MODE == "legacy" else None
     device.device_token_hash = hash_device_token(token, pepper)
     device.device_token_revoked_at = None
     device.device_token_version = int(getattr(device, "device_token_version", 0) or 0) + 1
