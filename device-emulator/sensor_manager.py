@@ -1,51 +1,16 @@
-import ipaddress
-import json
-import os
 import signal
-import subprocess
 import sys
 import time
-from pathlib import Path
 
 import docker
-import requests
-from docker.errors import APIError, NotFound
-from docker.types import Mount
+from manager.cert_lifecycle import DeviceCertLifecycle
+from manager.config import ManagerConfig
+from manager.docker_runtime import DockerRuntimeManager
+from manager.orchestration_api import OrchestrationApiClient
+from manager.reconciler import DeviceReconciler
+from manager.state_store import load_state, save_state
 
-
-BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-ORCHESTRATION_STATE_URL = f"{BACKEND_URL}/devices/internal/orchestration-state"
-RUNTIME_TOKEN_URL_TEMPLATE = f"{BACKEND_URL}/devices/internal/runtime-token/{{device_uid}}"
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
-HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "10"))
-STATE_FILE_PATH = Path(os.getenv("STATE_FILE_PATH", "/app/state.json"))
-STATE_SCHEMA_VERSION = 1
-DEVICE_NETWORK_NAME = os.getenv("DEVICE_NETWORK_NAME", "greenhouse_iot_net")
-DEVICE_IMAGE = os.getenv("DEVICE_IMAGE", "docker-device-runtime")
-SENSOR_IP_RANGE = os.getenv("SENSOR_IP_RANGE", "172.28.1.10-172.28.1.250")
-ACTUATOR_IP_RANGE = os.getenv("ACTUATOR_IP_RANGE", "172.28.2.10-172.28.2.250")
-MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
-MQTT_BROKER_PORT = os.getenv("MQTT_BROKER_PORT", "1883")
-MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").strip().lower() == "true"
-MQTT_TLS_CA_CERT = os.getenv("MQTT_TLS_CA_CERT", "").strip()
-MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").strip().lower() == "true"
-MQTT_TLS_CLIENT_CERT = os.getenv("MQTT_TLS_CLIENT_CERT", "").strip()
-MQTT_TLS_CLIENT_KEY = os.getenv("MQTT_TLS_CLIENT_KEY", "").strip()
-MQTT_USERNAME_DEVICE = os.getenv("MQTT_USERNAME_DEVICE", "").strip()
-MQTT_PASSWORD_DEVICE = os.getenv("MQTT_PASSWORD_DEVICE", "").strip()
-AUTO_RESTART_MAX_RETRIES = int(os.getenv("AUTO_RESTART_MAX_RETRIES", "5"))
-STOP_TIMEOUT_SECONDS = int(os.getenv("STOP_TIMEOUT_SECONDS", "10"))
-DEVICE_GROUP_PROJECT = os.getenv("DEVICE_GROUP_PROJECT", "devices")
-DEVICE_GROUP_SERVICE = os.getenv("DEVICE_GROUP_SERVICE", "device-runtime")
-MANAGER_KEY = os.getenv("MANAGER_KEY", "")
-RUNTIME_SECRETS_DIR = os.getenv("RUNTIME_SECRETS_DIR", "").strip()
-DEVICE_RUNTIME_SECRETS_VOLUME = os.getenv("DEVICE_RUNTIME_SECRETS_VOLUME", "").strip()
-MQTT_SHARED_CERTS_VOLUME = os.getenv("MQTT_SHARED_CERTS_VOLUME", "").strip()
-MQTT_CERTS_RW_DIR = os.getenv("MQTT_CERTS_RW_DIR", "/mqtt-certs-rw").strip()
-MQTT_DEVICE_CA_CERT_PATH = os.getenv("MQTT_DEVICE_CA_CERT_PATH", "/mosquitto-config-certs/device-ca.crt").strip()
-MQTT_DEVICE_CA_KEY_PATH = os.getenv("MQTT_DEVICE_CA_KEY_PATH", "/mosquitto-config-certs/device-ca.key").strip()
-MQTT_DEVICE_CERTS_SUBDIR = os.getenv("MQTT_DEVICE_CERTS_SUBDIR", "devices").strip() or "devices"
-MQTT_DEVICE_CRL_PATH = os.getenv("MQTT_DEVICE_CRL_PATH", "/mqtt-certs-rw/device-ca.crl").strip()
+CONFIG = ManagerConfig.from_env()
 
 SENSOR_SCRIPT_BY_DEVICE_TYPE = {
     "TEMP_SENSOR": "sensors/temperature_sensor.py",
@@ -64,315 +29,19 @@ ACTUATOR_SCRIPT_BY_DEVICE_TYPE = {
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-
-def _parse_ip_range(raw_range: str) -> list[str]:
-    start_raw, end_raw = [part.strip() for part in raw_range.split("-", 1)]
-    start_ip = ipaddress.ip_address(start_raw)
-    end_ip = ipaddress.ip_address(end_raw)
-    if int(end_ip) < int(start_ip):
-        raise ValueError(f"Invalid IP range: {raw_range}")
-    return [str(ipaddress.ip_address(value)) for value in range(int(start_ip), int(end_ip) + 1)]
-
-
-def _is_sensor(device_type: str) -> bool:
-    return "SENSOR" in (device_type or "")
-
-
-def _container_name(device_uid: str, device_type: str) -> str:
-    safe_uid = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
-    role = "sensor" if _is_sensor(device_type) else "actuator"
-    return f"greenhouse_{role}_{safe_uid}".lower()
-
-
-def _legacy_container_name(device_uid: str) -> str:
-    safe_uid = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
-    return f"greenhouse_device_{safe_uid}".lower()
-
-
-def _device_secret_basename(device_uid: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in device_uid)
-
-
-def _sanitize_cert_cn(raw: str) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in raw).strip("-")
-    return safe or "device"
-
-
-def _certs_base_dir() -> Path:
-    return Path(MQTT_CERTS_RW_DIR) / MQTT_DEVICE_CERTS_SUBDIR
-
-
-def _ca_db_dir() -> Path:
-    return Path(MQTT_CERTS_RW_DIR) / "ca-db"
-
-
-def _ca_config_path() -> Path:
-    return _ca_db_dir() / "openssl-ca.cnf"
-
-
-def _ensure_ca_db() -> Path:
-    base = _ca_db_dir()
-    certs_base = _certs_base_dir()
-    base.mkdir(parents=True, exist_ok=True)
-    certs_base.mkdir(parents=True, exist_ok=True)
-    (base / "index.txt").touch(exist_ok=True)
-    if not (base / "serial").exists():
-        (base / "serial").write_text("1000\n", encoding="utf-8")
-    if not (base / "crlnumber").exists():
-        (base / "crlnumber").write_text("1000\n", encoding="utf-8")
-    cfg = _ca_config_path()
-    cfg.write_text(
-        (
-            "[ ca ]\n"
-            "default_ca = CA_default\n\n"
-            "[ CA_default ]\n"
-            f"dir = {base.as_posix()}\n"
-            f"database = {(base / 'index.txt').as_posix()}\n"
-            f"new_certs_dir = {certs_base.as_posix()}\n"
-            f"certificate = {Path(MQTT_DEVICE_CA_CERT_PATH).as_posix()}\n"
-            f"private_key = {Path(MQTT_DEVICE_CA_KEY_PATH).as_posix()}\n"
-            f"serial = {(base / 'serial').as_posix()}\n"
-            f"crlnumber = {(base / 'crlnumber').as_posix()}\n"
-            "default_md = sha256\n"
-            "default_days = 365\n"
-            "default_crl_days = 365\n"
-            "policy = policy_any\n"
-            "unique_subject = no\n"
-            "x509_extensions = usr_cert\n\n"
-            "[ policy_any ]\n"
-            "commonName = supplied\n\n"
-            "[ usr_cert ]\n"
-            "basicConstraints = CA:FALSE\n"
-            "keyUsage = digitalSignature,keyEncipherment\n"
-            "extendedKeyUsage = clientAuth\n"
-        ),
-        encoding="utf-8",
-    )
-    return cfg
-
-
-def _generate_crl() -> None:
-    cfg = _ensure_ca_db()
-    subprocess.run(
-        ["openssl", "ca", "-gencrl", "-config", str(cfg), "-out", MQTT_DEVICE_CRL_PATH],
-        check=True,
-    )
-
-
-def issue_device_mtls_material(device_uid: str) -> tuple[str, str]:
-    cfg = _ensure_ca_db()
-    certs_base = _certs_base_dir()
-    safe_uid = _device_secret_basename(device_uid)
-    cert_path = certs_base / f"{safe_uid}.crt"
-    key_path = certs_base / f"{safe_uid}.key"
-    csr_path = certs_base / f"{safe_uid}.csr"
-    subj = (
-        f"/C=RU/ST=Tyumen/L=Tyumen/O=Greenhouse Dev/OU=Devices/"
-        f"CN={_sanitize_cert_cn(device_uid)}"
-    )
-    subprocess.run(["openssl", "genrsa", "-out", str(key_path), "2048"], check=True)
-    subprocess.run(
-        ["openssl", "req", "-new", "-key", str(key_path), "-out", str(csr_path), "-subj", subj],
-        check=True,
-    )
-    subprocess.run(
-        [
-            "openssl",
-            "ca",
-            "-batch",
-            "-config",
-            str(cfg),
-            "-in",
-            str(csr_path),
-            "-out",
-            str(cert_path),
-            "-notext",
-        ],
-        check=True,
-    )
-    try:
-        csr_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-    _generate_crl()
-    return str(cert_path), str(key_path)
-
-
-def revoke_device_mtls_material(device_uid: str) -> bool:
-    cfg = _ensure_ca_db()
-    safe_uid = _device_secret_basename(device_uid)
-    cert_path = _certs_base_dir() / f"{safe_uid}.crt"
-    key_path = _certs_base_dir() / f"{safe_uid}.key"
-    revoked = False
-    if cert_path.is_file() and cert_path.stat().st_size > 0:
-        subprocess.run(
-            ["openssl", "ca", "-config", str(cfg), "-revoke", str(cert_path)],
-            check=True,
-        )
-        revoked = True
-    _generate_crl()
-    try:
-        cert_path.unlink(missing_ok=True)
-        key_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-    return revoked
-
-
-def rotate_device_mtls_material(device_uid: str) -> tuple[str, str]:
-    revoke_device_mtls_material(device_uid)
-    return issue_device_mtls_material(device_uid)
-
-
-def reload_mqtt_broker() -> None:
-    try:
-        docker.from_env().containers.get("greenhouse_mqtt_broker").kill(signal="HUP")
-        print("[cert] sent HUP to greenhouse_mqtt_broker for config/CRL reload")
-    except Exception as exc:
-        print(f"[cert] warning: failed to reload mqtt broker ({exc})")
-
-
-def _ensure_device_mtls_material(device_uid: str, info: dict) -> tuple[str | None, str | None]:
-    if not MQTT_TLS_ENABLED:
-        return None, None
-    if not MQTT_CERTS_RW_DIR or not MQTT_DEVICE_CA_CERT_PATH or not MQTT_DEVICE_CA_KEY_PATH:
-        raise RuntimeError("mTLS enabled but MQTT cert paths are not configured")
-
-    certs_base = _certs_base_dir()
-    certs_base.mkdir(parents=True, exist_ok=True)
-    safe_uid = _device_secret_basename(device_uid)
-    cert_path = certs_base / f"{safe_uid}.crt"
-    key_path = certs_base / f"{safe_uid}.key"
-
-    if (
-        cert_path.is_file()
-        and key_path.is_file()
-        and cert_path.stat().st_size > 0
-        and key_path.stat().st_size > 0
-    ):
-        info["mtls_cert_path"] = str(cert_path)
-        info["mtls_key_path"] = str(key_path)
-        return str(cert_path), str(key_path)
-    try:
-        cert_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-    cert_path_s, key_path_s = issue_device_mtls_material(device_uid)
-    info["mtls_cert_path"] = str(cert_path)
-    info["mtls_key_path"] = str(key_path)
-    print(f"[manager] generated per-device mTLS cert for {device_uid}")
-    return cert_path_s, key_path_s
-
-
-def _sync_runtime_secret_file(
-    device_uid: str,
-    device_token: str | None,
-    device_token_version: int | None,
-    info: dict,
-) -> None:
-    if not RUNTIME_SECRETS_DIR:
-        return
-    ver = int(device_token_version if device_token_version is not None else 0)
-    if device_token is None:
-        # Commit #1 transition: internal orchestration state may omit token.
-        # Keep already synced runtime token; only record observed version.
-        info["observed_device_token_version"] = ver
-        return
-    tok = device_token
-    if info.get("synced_device_token_version") == ver and info.get("synced_device_token") == tok:
-        return
-    base = Path(RUNTIME_SECRETS_DIR)
-    base.mkdir(parents=True, exist_ok=True)
-    path = base / f"{_device_secret_basename(device_uid)}.json"
-    tmp = path.parent / f"{path.name}.tmp"
-    payload = {"device_token": tok, "device_token_version": ver}
-    tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
-    tmp.replace(path)
-    info["synced_device_token_version"] = ver
-    info["synced_device_token"] = tok
-    print(f"[manager] runtime secret file updated for {device_uid} version={ver}")
-
-
-def _device_labels(device_uid: str, device_type: str) -> dict[str, str]:
-    return {
-        "project": "greenhouse",
-        "managed_by": "sensor_manager",
-        "domain": "device",
-        "group": "devices",
-        "device_role": "sensor" if _is_sensor(device_type) else "actuator",
-        "device_uid": device_uid,
-        "device_type": device_type,
-        # Compose-style labels improve grouping in Docker Desktop UI.
-        "com.docker.compose.project": DEVICE_GROUP_PROJECT,
-        "com.docker.compose.service": DEVICE_GROUP_SERVICE,
-    }
-
-
-def _load_state() -> dict:
-    if not STATE_FILE_PATH.exists():
-        return {
-            "schema_version": STATE_SCHEMA_VERSION,
-            "updated_at": _now_iso(),
-            "devices": {},
-        }
-    try:
-        payload = json.loads(STATE_FILE_PATH.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("State file is not an object")
-        payload.setdefault("schema_version", STATE_SCHEMA_VERSION)
-        payload.setdefault("updated_at", _now_iso())
-        payload.setdefault("devices", {})
-        if not isinstance(payload["devices"], dict):
-            payload["devices"] = {}
-        return payload
-    except Exception as exc:
-        print(f"[manager] state load failed, fallback to empty state: {exc}")
-        return {
-            "schema_version": STATE_SCHEMA_VERSION,
-            "updated_at": _now_iso(),
-            "devices": {},
-        }
-
-
-def _save_state(state: dict) -> None:
-    state["schema_version"] = STATE_SCHEMA_VERSION
-    state["updated_at"] = _now_iso()
-    STATE_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = STATE_FILE_PATH.with_suffix(".tmp")
-    temp_path.write_text(json.dumps(state, ensure_ascii=True, indent=2), encoding="utf-8")
-    temp_path.replace(STATE_FILE_PATH)
-
-
-def _fetch_orchestration_state() -> list[dict] | None:
-    try:
-        headers = {"X-Manager-Key": MANAGER_KEY} if MANAGER_KEY else {}
-        response = requests.get(ORCHESTRATION_STATE_URL, timeout=5, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, list):
-            return data
-    except Exception as exc:
-        print(f"[manager] failed to fetch orchestration state: {exc}")
-    return None
-
-
-def _fetch_runtime_token(device_uid: str) -> tuple[str | None, int | None]:
-    try:
-        headers = {"X-Manager-Key": MANAGER_KEY} if MANAGER_KEY else {}
-        url = RUNTIME_TOKEN_URL_TEMPLATE.format(device_uid=device_uid)
-        response = requests.get(url, timeout=5, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload, dict):
-            tok = payload.get("device_token")
-            ver = payload.get("device_token_version")
-            token_value = tok if isinstance(tok, str) else None
-            token_ver = int(ver) if ver is not None else None
-            return token_value, token_ver
-    except Exception as exc:
-        print(f"[manager] failed to fetch runtime token for {device_uid}: {exc}")
-    return None, None
+CERT_LIFECYCLE = DeviceCertLifecycle(
+    certs_rw_dir=CONFIG.mqtt_certs_rw_dir,
+    device_ca_cert_path=CONFIG.mqtt_device_ca_cert_path,
+    device_ca_key_path=CONFIG.mqtt_device_ca_key_path,
+    device_certs_subdir=CONFIG.mqtt_device_certs_subdir,
+    device_crl_path=CONFIG.mqtt_device_crl_path,
+    broker_container_name=CONFIG.mqtt_broker_container_name,
+)
+ORCHESTRATION_API = OrchestrationApiClient(
+    backend_url=CONFIG.backend_url,
+    manager_key=CONFIG.manager_key,
+    timeout_seconds=5,
+)
 
 
 def _device_command(device_type: str) -> str:
@@ -385,281 +54,17 @@ def _device_command(device_type: str) -> str:
     return "python -u -c \"import time; print('unsupported device type'); time.sleep(10**9)\""
 
 
-def _allocate_ip(device_uid: str, device_type: str, devices_state: dict) -> str:
-    wanted_pool = _parse_ip_range(SENSOR_IP_RANGE if _is_sensor(device_type) else ACTUATOR_IP_RANGE)
-    used_ips = {
-        entry.get("assigned_ip")
-        for uid, entry in devices_state.items()
-        if uid != device_uid and entry.get("assigned_ip")
-    }
-    current = devices_state.get(device_uid, {}).get("assigned_ip")
-    if current and current in wanted_pool and current not in used_ips:
-        return current
-    for ip_value in wanted_pool:
-        if ip_value not in used_ips:
-            return ip_value
-    raise RuntimeError(f"No free IP for {device_uid} ({device_type})")
-
-
-def _get_container(client: docker.DockerClient, container_name: str):
-    try:
-        return client.containers.get(container_name)
-    except NotFound:
-        return None
-
-
-def _ensure_created(
-    client: docker.DockerClient,
-    network,
-    state: dict,
-    device_uid: str,
-    device_type: str,
-    device_token: str | None,
-):
-    devices_state = state["devices"]
-    info = devices_state.setdefault(device_uid, {})
-    assigned_ip = _allocate_ip(device_uid, device_type, devices_state)
-    desired_name = _container_name(device_uid, device_type)
-    stored_name = str(info.get("container_name") or "").strip()
-    # Migrate old naming persisted in state.json: greenhouse_device_<uid> -> greenhouse_sensor/actuator_<uid>
-    if stored_name.startswith("greenhouse_device_"):
-        info["container_name"] = desired_name
-        stored_name = desired_name
-    container_name = stored_name or desired_name
-    container = _get_container(client, container_name)
-
-    # Backward compatibility: if old naming scheme is used, rename in-place.
-    if container is None:
-        legacy_name = _legacy_container_name(device_uid)
-        legacy_container = _get_container(client, legacy_name)
-        if legacy_container is not None:
-            legacy_container.rename(desired_name)
-            container_name = desired_name
-            info["container_name"] = desired_name
-            container = _get_container(client, desired_name)
-            print(
-                f"[manager] renamed container {legacy_name} -> {desired_name} "
-                f"for {device_uid}"
-            )
-
-    if container is None:
-        command = _device_command(device_type)
-        effective_token = device_token
-        if effective_token is None:
-            remembered = str(info.get("synced_device_token") or "").strip()
-            effective_token = remembered if remembered else None
-        client_cert_path, client_key_path = _ensure_device_mtls_material(device_uid, info)
-        cert_mount_dir = f"/mqtt-certs/{MQTT_DEVICE_CERTS_SUBDIR}"
-        cert_mount_base = cert_mount_dir.rstrip("/")
-        cert_basename = _device_secret_basename(device_uid)
-        env = {
-            "DEVICE_UID": device_uid,
-            "DEVICE_TOKEN": effective_token,
-            "BACKEND_URL": BACKEND_URL,
-            "MQTT_BROKER_HOST": MQTT_BROKER_HOST,
-            "MQTT_BROKER_PORT": str(MQTT_BROKER_PORT),
-            "MQTT_TLS_ENABLED": "true" if MQTT_TLS_ENABLED else "false",
-            "MQTT_TLS_CA_CERT": MQTT_TLS_CA_CERT,
-            "MQTT_TLS_INSECURE": "true" if MQTT_TLS_INSECURE else "false",
-            "MQTT_TLS_CLIENT_CERT": (
-                f"{cert_mount_base}/{cert_basename}.crt"
-                if client_cert_path
-                else MQTT_TLS_CLIENT_CERT
-            ),
-            "MQTT_TLS_CLIENT_KEY": (
-                f"{cert_mount_base}/{cert_basename}.key"
-                if client_key_path
-                else MQTT_TLS_CLIENT_KEY
-            ),
-            "MQTT_USERNAME": MQTT_USERNAME_DEVICE,
-            "MQTT_PASSWORD": MQTT_PASSWORD_DEVICE,
-            "ACTUATOR_TYPE": device_type,
-            "RUNTIME_SECRETS_DIR": "/runtime-secrets",
-        }
-        env = {k: v for k, v in env.items() if v is not None}
-        mounts = []
-        if DEVICE_RUNTIME_SECRETS_VOLUME:
-            mounts.append(
-                Mount(
-                    target="/runtime-secrets",
-                    source=DEVICE_RUNTIME_SECRETS_VOLUME,
-                    type="volume",
-                    read_only=True,
-                )
-            )
-        if MQTT_SHARED_CERTS_VOLUME:
-            mounts.append(
-                Mount(
-                    target="/mqtt-certs",
-                    source=MQTT_SHARED_CERTS_VOLUME,
-                    type="volume",
-                    read_only=True,
-                )
-            )
-        create_kw: dict = {
-            "image": DEVICE_IMAGE,
-            "name": container_name,
-            "command": ["sh", "-c", command],
-            "detach": True,
-            "environment": env,
-            "labels": _device_labels(device_uid=device_uid, device_type=device_type),
-        }
-        if mounts:
-            create_kw["mounts"] = mounts
-        container = client.containers.create(**create_kw)
-        network.connect(container, ipv4_address=assigned_ip)
-        print(f"[manager] created container {container_name} for {device_uid} ip={assigned_ip}")
-
-    info.update(
-        {
-            "device_uid": device_uid,
-            "device_type": device_type,
-            "container_id": container.id,
-            "container_name": container_name,
-            "assigned_ip": assigned_ip,
-            "status": info.get("status", "created"),
-            "desired_runtime_state": info.get("desired_runtime_state", "stopped"),
-            "actual_runtime_state": info.get("actual_runtime_state", "created"),
-            "restart_count": int(info.get("restart_count", 0)),
-            "last_error": None,
-            "updated_at": _now_iso(),
-        }
-    )
-    return container, info
-
-
-def _ensure_stopped(container, info: dict) -> None:
-    container.reload()
-    if container.status == "running":
-        container.stop(timeout=STOP_TIMEOUT_SECONDS)
-        container.reload()
-    info["actual_runtime_state"] = "stopped"
-    info["status"] = "provisioned"
-    info["updated_at"] = _now_iso()
-
-
-def _ensure_running(container, info: dict) -> None:
-    container.reload()
-    if container.status != "running":
-        container.start()
-        container.reload()
-    info["actual_runtime_state"] = "running"
-    info["status"] = "running"
-    info["updated_at"] = _now_iso()
-
-
-def _ensure_removed(client: docker.DockerClient, state: dict, device_uid: str) -> None:
-    info = state["devices"].get(device_uid)
-    if not info:
-        return
-    container_name = info.get("container_name") or _container_name(
-        device_uid, str(info.get("device_type", ""))
-    )
-    container = _get_container(client, container_name)
-    if container is None:
-        container = _get_container(client, _legacy_container_name(device_uid))
-    if container is not None:
-        try:
-            container.stop(timeout=STOP_TIMEOUT_SECONDS)
-        except APIError:
-            pass
-        container.remove(force=True)
-        print(f"[manager] removed container {container_name} ({device_uid})")
-    state["devices"].pop(device_uid, None)
-    if RUNTIME_SECRETS_DIR:
-        try:
-            secret = Path(RUNTIME_SECRETS_DIR) / f"{_device_secret_basename(device_uid)}.json"
-            if secret.is_file():
-                secret.unlink()
-        except OSError:
-            pass
-
-
-def _reconcile_device(client: docker.DockerClient, network, state: dict, desired: dict) -> None:
-    device_uid = desired.get("device_uid")
-    device_type = desired.get("device_type")
-    desired_runtime_state = desired.get("desired_runtime_state", "stopped")
-    token_is_present = "device_token" in desired
-    device_token = desired.get("device_token") if token_is_present else None
-    device_token_version = desired.get("device_token_version")
-    if not device_uid or not device_type:
-        return
-
-    if desired_runtime_state == "removed":
-        _ensure_removed(client, state, device_uid)
-        return
-
-    # New flow: orchestration-state omits raw token; fetch per-device token only on sync need.
-    info = state["devices"].setdefault(device_uid, {})
-    desired_ver = int(device_token_version) if device_token_version is not None else None
-    synced_ver = int(info.get("synced_device_token_version")) if info.get("synced_device_token_version") is not None else None
-    needs_token_sync = (desired_ver is not None and desired_ver != synced_ver) or not info.get(
-        "synced_device_token"
-    )
-    if not token_is_present and needs_token_sync:
-        fetched_token, fetched_ver = _fetch_runtime_token(device_uid)
-        if fetched_token:
-            device_token = fetched_token
-            token_is_present = True
-        if fetched_ver is not None:
-            device_token_version = fetched_ver
-
-    container, info = _ensure_created(client, network, state, device_uid, device_type, device_token)
-    _sync_runtime_secret_file(device_uid, device_token, device_token_version, info)
-    info["desired_runtime_state"] = desired_runtime_state
-    info["status"] = desired.get("status", info.get("status"))
-
-    if desired_runtime_state == "running":
-        _ensure_running(container, info)
-    else:
-        _ensure_stopped(container, info)
-
-
-def _health_check(client: docker.DockerClient, state: dict) -> None:
-    for device_uid, info in list(state.get("devices", {}).items()):
-        container_name = info.get("container_name") or _container_name(
-            device_uid, str(info.get("device_type", ""))
-        )
-        container = _get_container(client, container_name)
-        if container is None:
-            container = _get_container(client, _legacy_container_name(device_uid))
-        if container is None:
-            info["actual_runtime_state"] = "missing"
-            info["last_error"] = "container not found"
-            continue
-
-        container.reload()
-        info["actual_runtime_state"] = container.status
-        info["updated_at"] = _now_iso()
-        wants_running = info.get("desired_runtime_state") == "running"
-        if wants_running and container.status != "running":
-            retries = int(info.get("restart_count", 0))
-            if retries < AUTO_RESTART_MAX_RETRIES:
-                try:
-                    container.restart(timeout=STOP_TIMEOUT_SECONDS)
-                    info["restart_count"] = retries + 1
-                    info["last_error"] = None
-                    print(f"[manager] auto-restart {device_uid} attempt={retries + 1}")
-                except APIError as exc:
-                    info["last_error"] = f"restart failed: {exc}"
-            else:
-                info["last_error"] = "auto-restart limit reached"
-
-
-def _stop_all_managed(client: docker.DockerClient, state: dict) -> None:
-    for info in list(state.get("devices", {}).values()):
-        container_name = info.get("container_name")
-        if not container_name:
-            continue
-        container = _get_container(client, container_name)
-        if container is None:
-            continue
-        try:
-            container.stop(timeout=STOP_TIMEOUT_SECONDS)
-            info["actual_runtime_state"] = "stopped"
-        except APIError as exc:
-            info["last_error"] = f"stop failed on shutdown: {exc}"
-        info["updated_at"] = _now_iso()
+RUNTIME_MANAGER = DockerRuntimeManager(
+    config=CONFIG.to_runtime_config(),
+    cert_lifecycle=CERT_LIFECYCLE,
+    device_command=_device_command,
+    now_iso=_now_iso,
+)
+RECONCILER = DeviceReconciler(
+    runtime_manager=RUNTIME_MANAGER,
+    orchestration_api=ORCHESTRATION_API,
+    runtime_secrets_dir=CONFIG.runtime_secrets_dir,
+)
 
 
 running = True
@@ -678,35 +83,23 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] in {"issue", "rotate", "revoke"}:
         action = sys.argv[1]
         uid = sys.argv[2]
-        if action == "issue":
-            cert, key = issue_device_mtls_material(uid)
-            reload_mqtt_broker()
-            print(json.dumps({"ok": True, "action": action, "device_uid": uid, "cert": cert, "key": key}))
-            raise SystemExit(0)
-        if action == "rotate":
-            cert, key = rotate_device_mtls_material(uid)
-            reload_mqtt_broker()
-            print(json.dumps({"ok": True, "action": action, "device_uid": uid, "cert": cert, "key": key}))
-            raise SystemExit(0)
-        revoked = revoke_device_mtls_material(uid)
-        reload_mqtt_broker()
-        print(json.dumps({"ok": True, "action": action, "device_uid": uid, "revoked": revoked}))
+        CERT_LIFECYCLE.run_cli_action(action, uid)
         raise SystemExit(0)
 
     client = docker.from_env()
-    network = client.networks.get(DEVICE_NETWORK_NAME)
-    state = _load_state()
+    network = client.networks.get(CONFIG.device_network_name)
+    state = load_state(CONFIG.state_file_path, CONFIG.state_schema_version, _now_iso)
     last_healthcheck_at = 0.0
 
-    print(f"[manager] polling orchestration state: {ORCHESTRATION_STATE_URL}")
+    print(f"[manager] polling orchestration state: {CONFIG.orchestration_state_url}")
     while running:
-        desired_devices = _fetch_orchestration_state()
+        desired_devices = ORCHESTRATION_API.fetch_orchestration_state()
         if desired_devices is not None:
             desired_uids = {item.get("device_uid") for item in desired_devices if item.get("device_uid")}
 
             for desired_device in desired_devices:
                 try:
-                    _reconcile_device(client, network, state, desired_device)
+                    RECONCILER.reconcile_device(client, network, state, desired_device)
                 except Exception as exc:
                     uid = desired_device.get("device_uid", "unknown")
                     print(f"[manager] reconcile failed for {uid}: {exc}")
@@ -717,17 +110,17 @@ if __name__ == "__main__":
             # Удаляем контейнеры только если устройство реально отсутствует в backend.
             stale_uids = [uid for uid in list(state["devices"].keys()) if uid not in desired_uids]
             for stale_uid in stale_uids:
-                _ensure_removed(client, state, stale_uid)
+                RUNTIME_MANAGER.ensure_removed(client, state, stale_uid)
 
         now = time.time()
-        if now - last_healthcheck_at >= HEALTHCHECK_INTERVAL_SECONDS:
-            _health_check(client, state)
+        if now - last_healthcheck_at >= CONFIG.healthcheck_interval_seconds:
+            RUNTIME_MANAGER.health_check(client, state)
             last_healthcheck_at = now
 
-        _save_state(state)
-        time.sleep(POLL_INTERVAL_SECONDS)
+        save_state(CONFIG.state_file_path, state, CONFIG.state_schema_version, _now_iso)
+        time.sleep(CONFIG.poll_interval_seconds)
 
     print("[manager] shutdown signal received, stopping managed containers...")
-    _stop_all_managed(client, state)
-    _save_state(state)
+    RUNTIME_MANAGER.stop_all_managed(client, state)
+    save_state(CONFIG.state_file_path, state, CONFIG.state_schema_version, _now_iso)
     print("[manager] shutdown complete")
