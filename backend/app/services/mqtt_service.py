@@ -3,6 +3,7 @@ import os
 import ssl
 import threading
 import time
+from collections import defaultdict
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -44,6 +45,10 @@ if not DEVICE_TOKEN_PEPPER:
 _DEVICE_TOKEN_REJECT_LOG_INTERVAL = float(
     os.getenv("MQTT_DEVICE_TOKEN_REJECT_LOG_INTERVAL", "30")
 )
+MQTT_MAX_PAYLOAD_BYTES = int(os.getenv("MQTT_MAX_PAYLOAD_BYTES", "8192"))
+MQTT_RATE_LIMIT_GLOBAL_PER_SEC = float(os.getenv("MQTT_RATE_LIMIT_GLOBAL_PER_SEC", "200"))
+MQTT_RATE_LIMIT_PER_DEVICE_PER_SEC = float(os.getenv("MQTT_RATE_LIMIT_PER_DEVICE_PER_SEC", "10"))
+MQTT_RATE_LIMIT_BURST = float(os.getenv("MQTT_RATE_LIMIT_BURST", "20"))
 
 _client: mqtt.Client | None = None
 _heartbeats: dict[str, dict[str, Any]] = {}
@@ -55,6 +60,11 @@ _runtime_lock = threading.Lock()
 _mqtt_connected = False
 _last_message_mono: float | None = None
 _disconnect_count = 0
+_rate_lock = threading.Lock()
+_global_tokens = MQTT_RATE_LIMIT_BURST
+_global_last_refill_mono = time.monotonic()
+_device_tokens: dict[str, float] = defaultdict(lambda: MQTT_RATE_LIMIT_BURST)
+_device_last_refill_mono: dict[str, float] = defaultdict(time.monotonic)
 
 
 def get_device_token_reject_totals() -> dict[str, int]:
@@ -108,6 +118,47 @@ def _decode_payload(payload_raw: bytes) -> dict[str, Any] | None:
         return parsed if isinstance(parsed, dict) else None
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
+
+
+def _refill_tokens(tokens: float, last_refill_mono: float, rate_per_sec: float) -> tuple[float, float]:
+    now = time.monotonic()
+    if rate_per_sec <= 0:
+        return 0.0, now
+    elapsed = max(0.0, now - last_refill_mono)
+    max_tokens = max(1.0, MQTT_RATE_LIMIT_BURST)
+    refilled = min(max_tokens, tokens + elapsed * rate_per_sec)
+    return refilled, now
+
+
+def _allow_message(device_uid: str | None) -> bool:
+    global _global_tokens, _global_last_refill_mono
+    with _rate_lock:
+        _global_tokens, _global_last_refill_mono = _refill_tokens(
+            _global_tokens, _global_last_refill_mono, MQTT_RATE_LIMIT_GLOBAL_PER_SEC
+        )
+        if _global_tokens < 1.0:
+            return False
+        _global_tokens -= 1.0
+        if not device_uid:
+            return True
+        tokens = _device_tokens[device_uid]
+        last_refill = _device_last_refill_mono[device_uid]
+        tokens, now = _refill_tokens(tokens, last_refill, MQTT_RATE_LIMIT_PER_DEVICE_PER_SEC)
+        if tokens < 1.0:
+            _device_tokens[device_uid] = tokens
+            _device_last_refill_mono[device_uid] = now
+            return False
+        _device_tokens[device_uid] = tokens - 1.0
+        _device_last_refill_mono[device_uid] = now
+        return True
+
+
+def _extract_device_uid_from_topic(topic: str) -> str | None:
+    parts = topic.split("/")
+    # greenhouse/<kind>/<device_uid>/<suffix>
+    if len(parts) >= 4 and parts[0] == "greenhouse":
+        return parts[2] or None
+    return None
 
 
 def _on_connect(client: mqtt.Client, _userdata, _flags, reason_code, _properties=None):
@@ -201,10 +252,15 @@ def _on_message(_client: mqtt.Client, _userdata, message: mqtt.MQTTMessage):
     global _last_message_mono
     with _runtime_lock:
         _last_message_mono = time.monotonic()
+    if len(message.payload or b"") > MQTT_MAX_PAYLOAD_BYTES:
+        return
+    topic = message.topic or ""
+    device_uid = _extract_device_uid_from_topic(topic)
+    if not _allow_message(device_uid):
+        return
     payload_dict = _decode_payload(message.payload)
     if not payload_dict:
         return
-    topic = message.topic or ""
     if topic.startswith("greenhouse/sensors/") and topic.endswith("/data"):
         _handle_sensor_payload(payload_dict)
         return
