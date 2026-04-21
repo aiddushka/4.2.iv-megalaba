@@ -1,80 +1,83 @@
 # Архитектура проекта "IoT Greenhouse"
 
-Документ описывает фактическую архитектуру проекта **по текущему коду**.
+Документ описывает фактическую архитектуру решения и взаимодействие компонентов Интернета вещей.
 
-## Компоненты
+## 1. Компоненты системы
 
-- **Backend**: FastAPI + SQLAlchemy + JWT (`backend/main.py`)
-- **PostgreSQL**: хранение пользователей, устройств, телеметрии, состояния актуаторов и связей
-- **Frontend #1 (Dashboard)**: `frontend-dashboard` (Vite/React) — снаружи **`https://localhost:8443/`** (через Nginx)
-- **Frontend #2 (Device Configurator)**: `frontend-device-config` (Vite/React) — снаружи **`https://localhost:8443/config/`** (через Nginx)
-- **Nginx (TLS)**: `greenhouse_backend_https_proxy` — терминирует HTTPS, отдаёт оба Vite и проксирует **`/api/`** → FastAPI
-- **Эмуляторы устройств**: `device-emulator`
-  - **менеджер сенсоров** (`sensor_manager.py`) — запускается в Docker, стартует сенсорные скрипты для активных датчиков
-  - **актуаторы** (`device-emulator/actuators/*.py`) — скрипты для ручного тестирования
+- **Backend**: FastAPI + SQLAlchemy + JWT (`backend/main.py`).
+- **PostgreSQL**: хранение пользователей, устройств, телеметрии, состояний актуаторов и связей.
+- **MQTT-брокер**: Eclipse Mosquitto (TLS/mTLS, ACL для топиков).
+- **Frontend Dashboard**: `frontend-dashboard`, внешний URL `https://localhost:8443/`.
+- **Frontend Device Configurator**: `frontend-device-config`, внешний URL `https://localhost:8443/config/`.
+- **Nginx**: TLS-терминация и прокси запросов `/api/*` на backend.
+- **Эмуляторы устройств**: `device-emulator` (датчики и тестовые актуаторы).
 
-## Запуск и сеть (Docker Compose)
+## 2. Docker-сеть и точки доступа
 
-Сервисы в `docker/docker-compose.yml`:
+Сервисы описаны в `docker/docker-compose.yml`.
 
-- **backend**: только внутри Docker-сети `http://backend:8000` (uvicorn `main:app`); с хоста API доступен как **`https://localhost:8443/api/...`** (префикс `/api/` снимает Nginx и проксирует на корень FastAPI)
-- **postgres**: `localhost:5432`
-- **greenhouse_backend_https_proxy**: с хоста **`https://localhost:8443`** (TLS), редирект с **`http://localhost:8080`**
-- **frontend-dashboard**: Vite в контейнере на `5173`, снаружи только через Nginx на **`/`**
-- **frontend-device-config**: Vite в контейнере на `5174`, снаружи только через Nginx на **`/config/`**
-- **sensor-emulator-manager**: без порта, общается с backend по `http://backend:8000`
+- `backend`: доступен только внутри сети Docker как `http://backend:8000`.
+- `postgres`: опубликован на хост `localhost:5432`.
+- `mqtt-broker`: TLS-подключение на `localhost:8883`.
+- `greenhouse_backend_https_proxy`: внешний вход через `https://localhost:8443`, HTTP-редирект с `http://localhost:8080`.
+- `frontend-dashboard` и `frontend-device-config`: работают в контейнерах и доступны извне только через Nginx.
+- `sensor-emulator-manager`: служебный контейнер без внешнего порта.
 
-## Поток данных (end-to-end)
+## 3. Поток IoT-данных (end-to-end)
 
-### 1) Регистрация устройства
+### 3.1 Регистрация устройства
 
-1. Оператор открывает Device Configurator (`https://localhost:8443/config/`)
-2. Форма отправляет `POST /api/devices/register` (без авторизации; с точки зрения FastAPI это `POST /devices/register`)
-3. Устройство создаётся со статусом `unassigned`
+1. Оператор открывает `https://localhost:8443/config/`.
+2. Форма отправляет `POST /api/devices/register`.
+3. Устройство создается в БД со статусом `unassigned`.
 
-### 2) “Установка” устройства (активация)
+### 3.2 Активация устройства
 
-1. Админ заходит на Dashboard (`https://localhost:8443/`) и авторизуется
-2. Админ получает `GET /devices/unassigned`
-3. Админ выполняет `POST /devices/assign` → устройство получает `location` и `status=active`
+1. Администратор входит на Dashboard.
+2. Получает список через `GET /api/devices/unassigned`.
+3. Назначает устройство (`POST /api/devices/assign`), после чего статус становится `active`.
 
-### 3) Телеметрия (сенсоры)
+### 3.3 Сбор телеметрии
 
-1. `device-emulator/sensor_manager.py` опрашивает `GET /devices/active-sensors`
-2. Для каждого активного датчика запускается соответствующий скрипт из `device-emulator/sensors/*`
-3. Сенсорный скрипт проверяет `GET /devices/status/{device_uid}` и отправляет показание в `POST /sensor-data/`
+1. `sensor_manager.py` запрашивает `GET /api/devices/active-sensors`.
+2. Для активных датчиков запускаются соответствующие скрипты.
+3. Устройства публикуют данные в MQTT-топики вида `greenhouse/sensors/<device_uid>/data`.
+4. Backend получает телеметрию, валидирует ее и сохраняет в `sensor_data`.
 
-### 4) Управление актуаторами
+### 3.4 Управление актуаторами
 
-- **Ручное управление**: `POST /actuators/control` (admin)
-- **Просмотр состояния**: `GET /dashboard/state` и/или `GET /actuators/status`
+- ручное управление: `POST /api/actuators/control`;
+- чтение состояния: `GET /api/actuators/status` и `GET /api/dashboard/state`.
 
-### 5) Связи “датчик → актуатор” и автоуправление
+### 3.5 Автоматизация "датчик -> актуатор"
 
-- Связи задаются через `device_links` (`/automation/links`)
-- При приходе сенсорных данных (`POST /sensor-data/`) backend может автоматически выставить состояние актуатора, если у связи включён `auto_control_enabled` и заданы `min_value/max_value`
+- связи хранятся в `device_links` и управляются через `/api/automation/links`;
+- при входящем измерении backend может автоматически изменять состояние актуатора, если у связи включен `auto_control_enabled` и заданы пороги.
 
-## Модель данных (PostgreSQL)
+## 4. Модель данных (PostgreSQL)
 
 ### `users`
-- `id`, `username`, `hashed_password`, `is_admin`, `can_view_dashboard`
+
+`id`, `username`, `hashed_password`, `is_admin`, `can_view_dashboard`.
 
 ### `devices`
-- `id`, `device_uid`, `device_type`, `description`
-- конфигурация подключения: `controller`, `pin`, `bus`, `bus_address`, `components`
-- эксплуатационные поля: `status`, `location`, `last_maintenance`, `maintenance_notes`, `change_history`
+
+`id`, `device_uid`, `device_type`, `description`, `status`, `location`, `controller`, `pin`, `bus`, `bus_address`, `components`, `last_maintenance`, `maintenance_notes`, `change_history`.
 
 ### `sensor_data`
-- `id`, `device_uid`, `value`, `sensor_type`, `created_at`
+
+`id`, `device_uid`, `value`, `sensor_type`, `created_at`.
 
 ### `actuators`
-- `id`, `device_uid`, `actuator_type`, `state`
+
+`id`, `device_uid`, `actuator_type`, `state`.
 
 ### `device_links`
-- `id`, `source_device_uid`, `target_device_uid`, `controller`, `description`
-- `active`, `auto_control_enabled`, `min_value`, `max_value`, `created_at`
+
+`id`, `source_device_uid`, `target_device_uid`, `description`, `controller`, `active`, `auto_control_enabled`, `min_value`, `max_value`, `created_at`.
 
 ### `automation_rules` (заготовка)
-- `id`, `name`, `sensor_type`, `condition`, `threshold`, `actuator_type`, `action`
+
+`id`, `name`, `sensor_type`, `condition`, `threshold`, `actuator_type`, `action`.
 
 

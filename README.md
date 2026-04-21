@@ -1,241 +1,67 @@
 # IoT Greenhouse MegaLab
-Лабораторный проект «**Умная теплица**» (IoT): backend + БД + два фронтенда + эмуляторы устройств.
 
-## Что внутри
+Лабораторный IoT-проект «Умная теплица»: backend, PostgreSQL, MQTT, два веб-интерфейса и эмуляторы устройств.
 
-- **Backend**: Python, FastAPI, SQLAlchemy, JWT auth
-- **БД**: PostgreSQL
-- **MQTT**: Eclipse Mosquitto (брокер телеметрии)
-- **Frontend** (снаружи только **HTTPS** через Nginx, порт **8443**):
-  - **Dashboard** — `https://localhost:8443/` (просмотр и управление, для админа)
-  - **Device Configurator** — `https://localhost:8443/config/` (регистрация устройств, без авторизации)
-- **Эмуляторы**:
-  - менеджер сенсоров в Docker — сам запускает сенсорные скрипты для активных датчиков
-  - актуаторы — отдельные скрипты для ручного запуска
+## Состав проекта
 
-## Ссылки на документацию
+- **Backend**: Python, FastAPI, SQLAlchemy, JWT-аутентификация.
+- **База данных**: PostgreSQL.
+- **MQTT-брокер**: Eclipse Mosquitto (TLS/mTLS, ACL).
+- **Frontend** (доступ через Nginx и HTTPS, порт `8443`):
+  - **Dashboard**: `https://localhost:8443/`
+  - **Device Configurator**: `https://localhost:8443/config/`
+- **Эмуляторы устройств**:
+  - менеджер датчиков в Docker;
+  - скрипты актуаторов для ручной проверки.
 
-- `docs/api-docs.md` — эндпоинты и примеры запросов
-- `docs/architecture.md` — архитектура и поток данных
-- `docs/sites.md` — страницы/модули фронтенда
-- `docs/tls.md` — перевыпуск MQTT TLS сертификатов (dev)
+## Документация
 
-## Быстрый старт (Docker)
+- `docs/architecture.md` - архитектура, потоки данных и IoT-контур.
+- `docs/sites.md` - описание двух сайтов и пользовательских сценариев.
+- `docs/api-docs.md` - API backend с примерами.
+- `docs/tls.md` - MQTT-безопасность, mTLS и работа с сертификатами.
+- `docs/tls.backup.md` - резервная копия документа по TLS.
+
+## Быстрый запуск
 
 ### Требования
 
-- установлен **Docker Desktop**
-- Docker Desktop в состоянии Running
+- установлен и запущен Docker Desktop.
 
-### Запуск
-
-Из корня репозитория:
+### Команды запуска
 
 ```bash
 cd docker
 docker compose up --build
 ```
 
-Поднимутся контейнеры:
+### Что поднимается
 
-- `greenhouse_postgres` — PostgreSQL (порт **5432**)
-- `greenhouse_mqtt_broker` — MQTT broker (**TLS-only**, порт **8883**)
-- `greenhouse_backend` — FastAPI (только внутри сети Docker, порт **8000**)
-- `greenhouse_backend_https_proxy` — Nginx: TLS, статика фронтов и прокси **`/api/`** → backend
-- `greenhouse_frontend_dashboard` — Vite dev server (доступ через Nginx на **`/`**)
-- `greenhouse_frontend_device_config` — Vite dev server (доступ через Nginx на **`/config/`**)
-- `greenhouse_sensor_emulator_manager` — менеджер сенсоров (без порта)
+- `greenhouse_postgres` - PostgreSQL (`5432`);
+- `greenhouse_mqtt_broker` - MQTT broker, только TLS (`8883`);
+- `greenhouse_backend` - FastAPI (внутри Docker-сети);
+- `greenhouse_backend_https_proxy` - Nginx (HTTPS, прокси `/api/`, раздача фронтендов);
+- `greenhouse_frontend_dashboard` - Vite Dashboard;
+- `greenhouse_frontend_device_config` - Vite Device Configurator;
+- `greenhouse_sensor_emulator_manager` - менеджер сенсорных эмуляторов.
 
-### Проверка
+### Проверка доступности
 
-- **Редирект на HTTPS**: `http://localhost:8080/` → `https://localhost:8443/…`
-- **API (через прокси)**: `https://localhost:8443/api/` — те же маршруты, что у FastAPI с корня (например `https://localhost:8443/api/auth/login`)
-- **Swagger**: `https://localhost:8443/docs`
-- **Dashboard**: `https://localhost:8443/`
-- **Device Configurator**: `https://localhost:8443/config/`
+- `http://localhost:8080/` -> редирект на HTTPS;
+- `https://localhost:8443/` -> Dashboard;
+- `https://localhost:8443/config/` -> Device Configurator;
+- `https://localhost:8443/api/` -> API через Nginx;
+- `https://localhost:8443/docs` -> Swagger UI.
 
-## MQTT TLS (кратко)
+## Учетная запись по умолчанию
 
-- Брокер принимает только TLS-подключения на порту `8883` (`1883` отключён).
-- Сертификаты Mosquitto лежат в `docker/mosquitto/certs/`.
-- Backend и device runtime доверяют CA через `MQTT_TLS_CA_CERT=.../ca.crt`.
+- Администратор: `admin / 123` (создается автоматически, если пользователя `admin` нет в БД).
 
-### Быстрая проверка TLS
+## Краткий сценарий работы системы
 
-Из папки `docker/`:
-
-```bash
-docker compose ps
-docker compose logs mqtt-broker --tail=120
-docker compose logs backend --tail=120
-```
-
-Ожидаемо:
-
-- в логах broker есть `Opening ... port 8883` и нет `port 1883`;
-- в логах broker видно `Client ... negotiated TLSv1.3 ...`;
-- в логах backend видно `connecting to mqtt-broker:8883`.
-
-### Учётные записи
-
-- **Админ по умолчанию**: `admin / 123` (создаётся автоматически при старте backend, если нет пользователя `admin`)
-
-## Как “живет” система (коротко)
-
-1) На `https://localhost:8443/config/` регистрируем устройства (`POST /api/devices/register`). Устройство попадает в статус `unassigned`.
-2) На Dashboard (админ) “устанавливаем” устройство (`POST /devices/assign`) → статус становится `active`.
-3) Менеджер сенсоров в Docker опрашивает `GET /devices/active-sensors` и запускает скрипты сенсоров для активных устройств.
-4) Сенсоры публикуют телеметрию в MQTT-топики `greenhouse/sensors/<device_uid>/data`, backend подписывается и сохраняет данные (HTTP `POST /sensor-data/` также остаётся доступным).
-5) Dashboard показывает агрегированное состояние через `GET /dashboard/state`. Админ может вручную управлять актуаторами `POST /actuators/control`, а также создавать “связи” датчик → актуатор (`/automation/links`).
-
-## Дерево проекта (актуальное)
-
-Ниже дерево репозитория (как в `tree /a /f`).
-
-```
-4.2.iv-megalaba
-|   .gitignore
-|   README.md
-|
-+---backend
-|   |   main.py
-|   |   requirements.txt
-|   |
-|   +---app
-|   |   |   main.py
-|   |   |   __init__.py
-|   |   |
-|   |   +---api
-|   |   |       actuators.py
-|   |   |       auth.py
-|   |   |       automation.py
-|   |   |       dashboard.py
-|   |   |       devices.py
-|   |   |       sensors.py
-|   |   |
-|   |   +---database
-|   |   |       base.py
-|   |   |       session.py
-|   |   |
-|   |   +---models
-|   |   |       actuator.py
-|   |   |       automation_rule.py
-|   |   |       device.py
-|   |   |       device_link.py
-|   |   |       sensor_data.py
-|   |   |       user.py
-|   |   |
-|   |   +---schemas
-|   |   |       actuator_schema.py
-|   |   |       auth_schema.py
-|   |   |       automation_schema.py
-|   |   |       device_schema.py
-|   |   |       sensor_schema.py
-|   |   |
-|   |   \---services
-|   |           actuator_service.py
-|   |           auth_service.py
-|   |           automation_service.py
-|   |           device_service.py
-|   |           sensor_service.py
-|   |
-|   \---images
-|       \---ArduinoUnoComponents
-|               AUno_��������_����������.png
-|               AUno_��������_�����_�_�������.png
-|               AUno_���������_���������.png
-|               AUno_������_���������_�����.png
-|               AUno_������_������������.png
-|               AUno_������_�����������.png
-|               AUno_���������������_�������.png
-|
-+---database
-|       init.sql
-|
-+---device-emulator
-|   |   sensor_manager.py
-|   |
-|   +---actuators
-|   |       heater.py
-|   |       irrigation.py
-|   |       light.py
-|   |       ventilation.py
-|   |
-|   \---sensors
-|           humidity_air_sensor.py
-|           humidity_soil_sensor.py
-|           light_sensor.py
-|           temperature_sensor.py
-|
-+---docker
-|   |   backend.Dockerfile
-|   |   docker-compose.yml
-|   |   frontend-dashboard.Dockerfile
-|   |   frontend-device-config.Dockerfile
-|   |
-|   \---database
-|
-+---docs
-|       api-docs.md
-|       architecture.md
-|       sites.md
-|
-+---frontend-dashboard
-|   |   index.html
-|   |   package.json
-|   |   tsconfig.json
-|   |   vite.config.ts
-|   |
-|   \---src
-|       |   App.tsx
-|       |   main.tsx
-|       |
-|       +---api
-|       |       actuatorsApi.ts
-|       |       apiClient.ts
-|       |       authApi.ts
-|       |       automationApi.ts
-|       |       dashboardApi.ts
-|       |       devicesApi.ts
-|       |       workersApi.ts
-|       |
-|       +---components
-|       |       DeviceHistoryBlock.tsx
-|       |       DeviceInfoBlock.tsx
-|       |       DeviceManagementBlock.tsx
-|       |
-|       \---pages
-|               DashboardPage.tsx
-|               LoginPage.tsx
-|               RegisterPage.tsx
-|               UnassignedDevicesPage.tsx
-|               WorkersPage.tsx
-|
-\---frontend-device-config
-    |   index.html
-    |   package.json
-    |   tsconfig.json
-    |   vite.config.ts
-    |
-    \---src
-        |   App.tsx
-        |   main.tsx
-        |
-        +---api
-        |       apiClient.ts
-        |       automationApi.ts
-        |       devicesApi.ts
-        |
-        +---components
-        |       DeviceForm.tsx
-        |
-        \---pages
-                RegisterDevicePage.tsx
-```
-
-## Примечания по backend entrypoint’ам
-
-В репозитории есть два файла `main.py`:
-
-- `backend/main.py` — **используется Docker’ом** (`uvicorn main:app`)
+1. На `https://localhost:8443/config/` регистрируется устройство (`POST /api/devices/register`), статус - `unassigned`.
+2. Администратор на Dashboard назначает устройство на локацию (`POST /api/devices/assign`), статус - `active`.
+3. Сенсорный менеджер получает список активных датчиков (`GET /api/devices/active-sensors`) и запускает соответствующие эмуляторы.
+4. Телеметрия публикуется в MQTT-топики вида `greenhouse/sensors/<device_uid>/data`; backend обрабатывает данные и сохраняет их в БД.
+5. Dashboard показывает агрегированное состояние (`GET /api/dashboard/state`) и позволяет управлять актуаторами (`POST /api/actuators/control`).
 

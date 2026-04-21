@@ -1,8 +1,10 @@
 # API проекта "IoT Greenhouse" (актуально по коду)
 
-Base URL: `http://localhost:8000`
+Base URL (через Nginx): `https://localhost:8443/api`
 
-Swagger UI: `GET /docs`
+Внутренний URL backend в Docker-сети: `http://backend:8000`
+
+Swagger UI: `https://localhost:8443/docs`
 
 ## Авторизация
 
@@ -76,7 +78,7 @@ Body (минимально):
 Список устройств со статусом `unassigned`.
 
 ### `GET /devices/assigned` (auth)
-Список устройств, которые уже “не unassigned” (включая `active`).
+Список устройств со статусом, отличным от `unassigned` (включая `active`).
 
 ### `POST /devices/assign` (admin only)
 “Установка” устройства на локацию: проставляет `location` и переводит в `active`.
@@ -144,7 +146,7 @@ Body:
 ```
 
 ### `GET /sensor-data/`
-Список телеметрии (по времени убыв.).
+Список телеметрии (сортировка по времени убывания).
 
 ## Actuators (`/actuators`)
 
@@ -206,3 +208,16 @@ Body:
 Доступ:
 - админ: всегда
 - работник: только если `can_view_dashboard=true`
+
+## Примеры вызова через внешний URL
+
+```bash
+curl -k -X POST "https://localhost:8443/api/auth/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=123"
+```
+
+```bash
+curl -k "https://localhost:8443/api/dashboard/state" \
+  -H "Authorization: Bearer <token>"
+```
