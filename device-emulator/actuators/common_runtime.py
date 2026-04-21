@@ -2,6 +2,7 @@ import json
 import os
 import ssl
 import time
+import uuid
 
 import paho.mqtt.client as mqtt
 
@@ -66,6 +67,7 @@ def run_actuator_listener(default_state: str = "OFF") -> None:
             "actuator_type": ACTUATOR_TYPE,
             "state": current_state,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "message_id": uuid.uuid4().hex,
         }
         mqtt_client.publish(STATE_TOPIC, json.dumps(state_payload), qos=1)
         print(f"[{DEVICE_UID}] command applied: {current_state}")
@@ -85,6 +87,7 @@ def run_actuator_listener(default_state: str = "OFF") -> None:
                 "status": "alive",
                 "state": current_state,
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "message_id": uuid.uuid4().hex,
             }
             client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
             last_heartbeat_at = now

@@ -4,6 +4,7 @@ import ssl
 import threading
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -49,6 +50,8 @@ MQTT_MAX_PAYLOAD_BYTES = int(os.getenv("MQTT_MAX_PAYLOAD_BYTES", "8192"))
 MQTT_RATE_LIMIT_GLOBAL_PER_SEC = float(os.getenv("MQTT_RATE_LIMIT_GLOBAL_PER_SEC", "200"))
 MQTT_RATE_LIMIT_PER_DEVICE_PER_SEC = float(os.getenv("MQTT_RATE_LIMIT_PER_DEVICE_PER_SEC", "10"))
 MQTT_RATE_LIMIT_BURST = float(os.getenv("MQTT_RATE_LIMIT_BURST", "20"))
+MQTT_REPLAY_WINDOW_SECONDS = int(os.getenv("MQTT_REPLAY_WINDOW_SECONDS", "30"))
+MQTT_REPLAY_ID_TTL_SECONDS = int(os.getenv("MQTT_REPLAY_ID_TTL_SECONDS", "120"))
 
 _client: mqtt.Client | None = None
 _heartbeats: dict[str, dict[str, Any]] = {}
@@ -65,6 +68,8 @@ _global_tokens = MQTT_RATE_LIMIT_BURST
 _global_last_refill_mono = time.monotonic()
 _device_tokens: dict[str, float] = defaultdict(lambda: MQTT_RATE_LIMIT_BURST)
 _device_last_refill_mono: dict[str, float] = defaultdict(time.monotonic)
+_replay_lock = threading.Lock()
+_seen_message_ids: dict[str, float] = {}
 
 
 def get_device_token_reject_totals() -> dict[str, int]:
@@ -159,6 +164,43 @@ def _extract_device_uid_from_topic(topic: str) -> str | None:
     if len(parts) >= 4 and parts[0] == "greenhouse":
         return parts[2] or None
     return None
+
+
+def _parse_payload_ts_seconds(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def _is_replay_protected(payload_dict: dict[str, Any], topic: str) -> bool:
+    message_id = str(payload_dict.get("message_id") or "").strip()
+    ts_seconds = _parse_payload_ts_seconds(payload_dict.get("ts"))
+    if not message_id or ts_seconds is None:
+        return False
+    now = time.time()
+    if abs(now - ts_seconds) > max(1, MQTT_REPLAY_WINDOW_SECONDS):
+        return False
+    key = f"{topic}|{message_id}"
+    with _replay_lock:
+        # Periodic cleanup of expired IDs.
+        expired_keys = [k for k, exp in _seen_message_ids.items() if exp <= now]
+        for expired in expired_keys:
+            _seen_message_ids.pop(expired, None)
+        if key in _seen_message_ids:
+            return False
+        _seen_message_ids[key] = now + max(1, MQTT_REPLAY_ID_TTL_SECONDS)
+    return True
 
 
 def _on_connect(client: mqtt.Client, _userdata, _flags, reason_code, _properties=None):
@@ -260,6 +302,8 @@ def _on_message(_client: mqtt.Client, _userdata, message: mqtt.MQTTMessage):
         return
     payload_dict = _decode_payload(message.payload)
     if not payload_dict:
+        return
+    if not _is_replay_protected(payload_dict, topic):
         return
     if topic.startswith("greenhouse/sensors/") and topic.endswith("/data"):
         _handle_sensor_payload(payload_dict)

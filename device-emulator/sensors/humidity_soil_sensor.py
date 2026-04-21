@@ -3,6 +3,7 @@ import random
 import os
 import json
 import ssl
+import uuid
 import paho.mqtt.client as mqtt
 
 from runtime_token import DeviceTokenHolder
@@ -51,6 +52,7 @@ if __name__ == "__main__":
                 "status": "alive",
                 "device_token": _token_holder.current(),
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "message_id": uuid.uuid4().hex,
             }
             mqtt_client.publish(HEARTBEAT_TOPIC, json.dumps(heartbeat_payload), qos=0)
             last_heartbeat_at = now
@@ -63,6 +65,8 @@ if __name__ == "__main__":
             "device_token": _token_holder.current(),
             "value": round(soil_moisture, 2),
             "sensor_type": "humidity_soil",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "message_id": uuid.uuid4().hex,
         }
         try:
             mqtt_client.publish(MQTT_TOPIC, json.dumps(payload), qos=1)
